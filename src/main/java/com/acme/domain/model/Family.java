@@ -1,22 +1,31 @@
 package com.acme.domain.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "family")
+@Table(name = "families")
 public class Family extends BaseEntity {
 
     @Column(nullable = false, length = 100)
     private String name;
 
-    @OneToMany(mappedBy = "family", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "family")
     private List<User> users = new ArrayList<>();
 
-    @OneToMany(mappedBy = "family", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "family")
     private List<Dependent> dependents = new ArrayList<>();
+
+    @OneToMany(mappedBy = "family")
+    private List<Specialty> specialties = new ArrayList<>();
+
+    @OneToMany(mappedBy = "family")
+    private List<Professional> professionals = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -30,16 +39,16 @@ public class Family extends BaseEntity {
         return users;
     }
 
-    public void setUsers(List<User> users) {
-        this.users = users;
-    }
-
     public List<Dependent> getDependents() {
         return dependents;
     }
 
-    public void setDependents(List<Dependent> dependents) {
-        this.dependents = dependents;
+    public List<Specialty> getSpecialties() {
+        return specialties;
+    }
+
+    public List<Professional> getProfessionals() {
+        return professionals;
     }
 
     public void addUser(User user) {
@@ -60,5 +69,25 @@ public class Family extends BaseEntity {
     public void removeDependent(Dependent dependent) {
         dependents.remove(dependent);
         dependent.setFamily(null);
+    }
+
+    public void addSpecialty(Specialty specialty) {
+        specialties.add(specialty);
+        specialty.setFamily(this);
+    }
+
+    public void removeSpecialty(Specialty specialty) {
+        specialties.remove(specialty);
+        specialty.setFamily(null);
+    }
+
+    public void addProfessional(Professional professional) {
+        professionals.add(professional);
+        professional.setFamily(this);
+    }
+
+    public void removeProfessional(Professional professional) {
+        professionals.remove(professional);
+        professional.setFamily(null);
     }
 }

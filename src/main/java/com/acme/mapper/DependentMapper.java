@@ -11,27 +11,23 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class DependentMapper {
 
     public Dependent toEntity(CreateDependentRequest request, Family family) {
-
         Dependent dependent = new Dependent();
-
-        dependent.setName(request.name());
+        dependent.setName(request.name().trim());
         dependent.setBirthDate(request.birthDate());
         dependent.setFamily(family);
-
         return dependent;
     }
 
-    public Dependent updateEntity(UpdateDependentRequest request, Dependent dependent, Family family) {
-
-        dependent.setName(request.name());
+    public Dependent updateEntity(
+            UpdateDependentRequest request,
+            Dependent dependent
+    ) {
+        dependent.setName(request.name().trim());
         dependent.setBirthDate(request.birthDate());
-        dependent.setFamily(family);
-
         return dependent;
     }
 
     public DependentResponse toResponse(Dependent dependent) {
-
         return new DependentResponse(
                 dependent.getId(),
                 dependent.getName(),

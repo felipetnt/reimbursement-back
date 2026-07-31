@@ -4,22 +4,18 @@ import com.acme.domain.enums.UserRole;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-
-import java.util.UUID;
+import jakarta.validation.constraints.Size;
 
 public record UpdateUserRequest(
-
         @NotBlank(message = "Nome é obrigatório")
+        @Size(max = 100, message = "Nome deve ter no máximo 100 caracteres")
         String name,
 
-        @NotBlank(message = "Email é obrigatório")
-        @Email(message = "Email inválido")
+        @NotBlank(message = "E-mail é obrigatório")
+        @Email(message = "E-mail inválido")
+        @Size(max = 150, message = "E-mail deve ter no máximo 150 caracteres")
         String email,
 
-        @NotNull(message = "Role é obrigatória")
-        UserRole role,
-
-        @NotNull(message = "Família é obrigatória")
-        UUID familyId
-
+        @NotNull(message = "Perfil de acesso é obrigatório")
+        UserRole role
 ) {}

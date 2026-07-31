@@ -1,13 +1,39 @@
 package com.acme.domain.model;
 
 import com.acme.domain.enums.SolicitationStatus;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "solicitations")
+@Table(
+        name = "solicitations",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_solicitation_attempt",
+                        columnNames = {
+                                "reimbursement_id",
+                                "attempt_number"
+                        }
+                ),
+                @UniqueConstraint(
+                        name = "uk_solicitation_protocol",
+                        columnNames = {
+                                "reimbursement_id",
+                                "protocol_number"
+                        }
+                )
+        }
+)
 public class Solicitation extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -21,7 +47,7 @@ public class Solicitation extends BaseEntity {
     @Column(nullable = false, length = 30)
     private SolicitationStatus status;
 
-    @Column(name = "protocol_number", unique = true, length = 100)
+    @Column(name = "protocol_number", length = 100)
     private String protocolNumber;
 
     @Column(name = "request_date")
@@ -99,5 +125,4 @@ public class Solicitation extends BaseEntity {
     public void setNote(String note) {
         this.note = note;
     }
-
 }

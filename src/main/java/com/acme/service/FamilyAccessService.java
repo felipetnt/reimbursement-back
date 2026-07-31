@@ -1,0 +1,46 @@
+package com.acme.service;
+
+import com.acme.domain.model.Family;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+
+import java.util.UUID;
+
+@ApplicationScoped
+public class FamilyAccessService {
+
+    @Inject
+    CurrentUserService currentUserService;
+
+    public UUID getCurrentFamilyId() {
+        return currentUserService.getFamilyId();
+    }
+
+    public Family getCurrentFamily() {
+        UUID familyId = getCurrentFamilyId();
+
+        Family family = Family.findById(familyId);
+
+        if (family == null) {
+            throw new WebApplicationException(
+                    "A família vinculada ao usuário autenticado não foi encontrada.",
+                    Response.Status.UNAUTHORIZED
+            );
+        }
+
+        return family;
+    }
+
+    public void ensureRequestUsesCurrentFamily(
+            UUID requestedFamilyId
+    ) {
+        if (!getCurrentFamilyId().equals(requestedFamilyId)) {
+            throw new WebApplicationException(
+                    "Não é permitido acessar ou cadastrar dados em outra família.",
+                    Response.Status.FORBIDDEN
+            );
+        }
+    }
+}

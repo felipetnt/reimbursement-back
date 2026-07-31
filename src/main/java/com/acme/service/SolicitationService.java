@@ -17,7 +17,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class SolicitationService {
@@ -25,60 +24,79 @@ public class SolicitationService {
     @Inject
     SolicitationMapper mapper;
 
+    @Inject
+    FamilyAccessService familyAccessService;
+
+    @Inject
+    CurrentUserService currentUserService;
+
     public List<SolicitationResponse> list() {
-        return Solicitation.<Solicitation>listAll()
-                .stream()
-                .map(mapper::toResponse)
-                .collect(Collectors.toList());
-    }
-
-    public SolicitationResponse findById(UUID id) {
-        Solicitation solicitation = Solicitation.findById(id);
-
-        ensureSolicitationExists(solicitation);
-
-        return mapper.toResponse(solicitation);
-    }
-
-    public List<SolicitationResponse> listByReimbursement(UUID reimbursementId) {
-        Reimbursement reimbursement = Reimbursement.findById(reimbursementId);
-
-        ensureReimbursementExists(reimbursement);
+        UUID familyId =
+                familyAccessService.getCurrentFamilyId();
 
         return Solicitation.<Solicitation>list(
-                        "reimbursement.id = ?1 order by attemptNumber asc",
-                        reimbursementId
+                        "reimbursement.therapy.dependent."
+                                + "family.id = ?1 "
+                                + "order by reimbursement."
+                                + "referenceMonth desc, "
+                                + "attemptNumber asc",
+                        familyId
                 )
                 .stream()
                 .map(mapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
+    }
+
+    public SolicitationResponse findById(UUID id) {
+        return mapper.toResponse(
+                findScopedSolicitation(id)
+        );
+    }
+
+    public List<SolicitationResponse>
+    listByReimbursement(UUID reimbursementId) {
+
+        Reimbursement reimbursement =
+                findScopedReimbursement(
+                        reimbursementId
+                );
+
+        return Solicitation.<Solicitation>list(
+                        "reimbursement.id = ?1 "
+                                + "order by "
+                                + "attemptNumber asc",
+                        reimbursement.getId()
+                )
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
     }
 
     @Transactional
-    public SolicitationResponse create(CreateSolicitationRequest request) {
-        Reimbursement reimbursement = Reimbursement.findById(request.reimbursementId());
+    public SolicitationResponse create(
+            CreateSolicitationRequest request
+    ) {
+        currentUserService.requireWritePermission();
 
-        ensureReimbursementExists(reimbursement);
+        Reimbursement reimbursement =
+                findScopedReimbursement(
+                        request.reimbursementId()
+                );
 
         ensureCanCreateNewAttempt(reimbursement);
 
-        validateStatusRules(
-                request.status(),
-                request.protocolNumber(),
-                request.requestDate(),
-                request.reimbursementDate(),
-                request.amountReceived()
-        );
+        Integer attemptNumber =
+                getNextAttemptNumber(
+                        reimbursement.getId()
+                );
 
-        ensureProtocolAvailable(request.protocolNumber());
-
-        Integer nextAttemptNumber = getNextAttemptNumber(reimbursement.getId());
-
-        Solicitation solicitation = mapper.toEntity(
-                request,
-                reimbursement,
-                nextAttemptNumber
-        );
+        Solicitation solicitation =
+                mapper.toEntity(
+                        request,
+                        reimbursement,
+                        attemptNumber,
+                        SolicitationStatus.NOT_REQUESTED
+                );
 
         solicitation.persist();
 
@@ -86,13 +104,19 @@ public class SolicitationService {
     }
 
     @Transactional
-    public SolicitationResponse update(UUID id,
-                                       UpdateSolicitationRequest request) {
-        Solicitation solicitation = Solicitation.findById(id);
+    public SolicitationResponse update(
+            UUID id,
+            UpdateSolicitationRequest request
+    ) {
+        currentUserService.requireWritePermission();
 
-        ensureSolicitationExists(solicitation);
+        Solicitation solicitation =
+                findScopedSolicitation(id);
 
-        validateStatusTransition(solicitation.getStatus(), request.status());
+        validateStatusTransition(
+                solicitation.getStatus(),
+                request.status()
+        );
 
         validateStatusRules(
                 request.status(),
@@ -102,57 +126,110 @@ public class SolicitationService {
                 request.amountReceived()
         );
 
-        ensureProtocolAvailableForUpdate(
+        ensureProtocolAvailable(
                 request.protocolNumber(),
+                solicitation.getReimbursement().getId(),
                 solicitation.getId()
         );
 
-        mapper.updateEntity(request, solicitation);
+        mapper.updateEntity(
+                request,
+                solicitation
+        );
 
         return mapper.toResponse(solicitation);
     }
 
-    @Transactional
-    public void delete(UUID id) {
-        Solicitation solicitation = Solicitation.findById(id);
+    private Solicitation findScopedSolicitation(
+            UUID id
+    ) {
+        UUID familyId =
+                familyAccessService.getCurrentFamilyId();
 
-        ensureSolicitationExists(solicitation);
+        Solicitation solicitation =
+                Solicitation.find(
+                        "id = ?1 "
+                                + "and reimbursement.therapy."
+                                + "dependent.family.id = ?2",
+                        id,
+                        familyId
+                ).firstResult();
 
-        solicitation.delete();
+        if (solicitation == null) {
+            throw new WebApplicationException(
+                    "Solicitação não encontrada.",
+                    Response.Status.NOT_FOUND
+            );
+        }
+
+        return solicitation;
     }
 
-    private Integer getNextAttemptNumber(UUID reimbursementId) {
-        Solicitation lastSolicitation = Solicitation.find(
-                "reimbursement.id = ?1 order by attemptNumber desc",
+    private Reimbursement findScopedReimbursement(
+            UUID id
+    ) {
+        UUID familyId =
+                familyAccessService.getCurrentFamilyId();
+
+        Reimbursement reimbursement =
+                Reimbursement.find(
+                        "id = ?1 "
+                                + "and therapy.dependent."
+                                + "family.id = ?2",
+                        id,
+                        familyId
+                ).firstResult();
+
+        if (reimbursement == null) {
+            throw new WebApplicationException(
+                    "Reembolso não encontrado.",
+                    Response.Status.NOT_FOUND
+            );
+        }
+
+        return reimbursement;
+    }
+
+    private Integer getNextAttemptNumber(
+            UUID reimbursementId
+    ) {
+        Solicitation last = Solicitation.find(
+                "reimbursement.id = ?1 "
+                        + "order by attemptNumber desc",
                 reimbursementId
         ).firstResult();
 
-        if (lastSolicitation == null) {
-            return 1;
-        }
-
-        return lastSolicitation.getAttemptNumber() + 1;
+        return last == null
+                ? 1
+                : last.getAttemptNumber() + 1;
     }
 
-    private void ensureCanCreateNewAttempt(Reimbursement reimbursement) {
-        Solicitation lastSolicitation = Solicitation.find(
-                "reimbursement.id = ?1 order by attemptNumber desc",
+    private void ensureCanCreateNewAttempt(
+            Reimbursement reimbursement
+    ) {
+        Solicitation last = Solicitation.find(
+                "reimbursement.id = ?1 "
+                        + "order by attemptNumber desc",
                 reimbursement.getId()
         ).firstResult();
 
-        if (lastSolicitation == null) {
-            return;
-        }
-
-        if (lastSolicitation.getStatus() != SolicitationStatus.DENIED) {
+        if (last != null
+                && last.getStatus()
+                != SolicitationStatus.DENIED) {
             throw new WebApplicationException(
-                    "Só é possível criar uma nova tentativa quando a última solicitação estiver negada.",
+                    "Uma nova tentativa só pode ser criada quando a última solicitação estiver negada.",
                     Response.Status.CONFLICT
             );
         }
     }
 
-    private void validateStatusRules(SolicitationStatus status, String protocolNumber, LocalDate requestDate, LocalDate reimbursementDate, BigDecimal amountReceived) {
+    private void validateStatusRules(
+            SolicitationStatus status,
+            String protocolNumber,
+            LocalDate requestDate,
+            LocalDate reimbursementDate,
+            BigDecimal amountReceived
+    ) {
         if (status == null) {
             throw new WebApplicationException(
                     "Status é obrigatório.",
@@ -160,16 +237,20 @@ public class SolicitationService {
             );
         }
 
-        if (statusRequiresProtocol(status) && isBlank(protocolNumber)) {
+        if (status == SolicitationStatus.NOT_REQUESTED) {
+            return;
+        }
+
+        if (isBlank(protocolNumber)) {
             throw new WebApplicationException(
-                    "Protocolo é obrigatório para este status.",
+                    "Protocolo é obrigatório a partir do envio da solicitação.",
                     Response.Status.BAD_REQUEST
             );
         }
 
-        if (statusRequiresRequestDate(status) && requestDate == null) {
+        if (requestDate == null) {
             throw new WebApplicationException(
-                    "Data de solicitação é obrigatória para este status.",
+                    "Data da solicitação é obrigatória a partir do envio.",
                     Response.Status.BAD_REQUEST
             );
         }
@@ -177,23 +258,27 @@ public class SolicitationService {
         if (status == SolicitationStatus.REIMBURSED) {
             if (reimbursementDate == null) {
                 throw new WebApplicationException(
-                        "Data de reembolso é obrigatória para status REIMBURSED.",
+                        "Data de reembolso é obrigatória para o status REIMBURSED.",
                         Response.Status.BAD_REQUEST
                 );
             }
 
-            if (amountReceived == null || amountReceived.compareTo(BigDecimal.ZERO) <= 0) {
+            if (amountReceived == null
+                    || amountReceived.compareTo(
+                    BigDecimal.ZERO
+            ) <= 0) {
                 throw new WebApplicationException(
-                        "Valor recebido deve ser maior que zero para status REIMBURSED.",
+                        "Valor recebido deve ser maior que zero para o status REIMBURSED.",
                         Response.Status.BAD_REQUEST
                 );
             }
         }
     }
 
-    private void validateStatusTransition(SolicitationStatus currentStatus,
-                                          SolicitationStatus newStatus) {
-
+    private void validateStatusTransition(
+            SolicitationStatus currentStatus,
+            SolicitationStatus newStatus
+    ) {
         if (newStatus == null) {
             throw new WebApplicationException(
                     "Novo status é obrigatório.",
@@ -205,93 +290,60 @@ public class SolicitationService {
             return;
         }
 
-        boolean validTransition =
-                currentStatus == SolicitationStatus.NOT_REQUESTED
-                        && newStatus == SolicitationStatus.UNDER_REVIEW
+        boolean valid =
+                currentStatus
+                        == SolicitationStatus.NOT_REQUESTED
+                        && newStatus
+                        == SolicitationStatus.UNDER_REVIEW
 
-                        || currentStatus == SolicitationStatus.UNDER_REVIEW
+                || currentStatus
+                        == SolicitationStatus.UNDER_REVIEW
                         && (
-                        newStatus == SolicitationStatus.AUTHORIZED
-                                || newStatus == SolicitationStatus.DENIED
+                        newStatus
+                                == SolicitationStatus.AUTHORIZED
+                                || newStatus
+                                == SolicitationStatus.DENIED
                 )
 
-                        || currentStatus == SolicitationStatus.AUTHORIZED
-                        && newStatus == SolicitationStatus.REIMBURSED;
+                || currentStatus
+                        == SolicitationStatus.AUTHORIZED
+                        && newStatus
+                        == SolicitationStatus.REIMBURSED;
 
-        if (!validTransition) {
+        if (!valid) {
             throw new WebApplicationException(
                     "Transição de status inválida: "
-                            + currentStatus + " -> " + newStatus,
+                            + currentStatus
+                            + " -> "
+                            + newStatus,
                     Response.Status.BAD_REQUEST
             );
         }
     }
 
-    private boolean statusRequiresProtocol(SolicitationStatus status) {
-        return status == SolicitationStatus.UNDER_REVIEW
-                || status == SolicitationStatus.AUTHORIZED
-                || status == SolicitationStatus.REIMBURSED
-                || status == SolicitationStatus.DENIED;
-    }
-
-    private boolean statusRequiresRequestDate(SolicitationStatus status) {
-        return status == SolicitationStatus.UNDER_REVIEW
-                || status == SolicitationStatus.AUTHORIZED
-                || status == SolicitationStatus.REIMBURSED
-                || status == SolicitationStatus.DENIED;
-    }
-
-    private void ensureProtocolAvailable(String protocolNumber) {
-        if (isBlank(protocolNumber)) {
-            return;
-        }
-
-        long count = Solicitation.count(
-                "protocolNumber",
-                protocolNumber.trim()
-        );
-
-        if (count > 0) {
-            throw new WebApplicationException(
-                    "Já existe uma solicitação com este protocolo.",
-                    Response.Status.CONFLICT
-            );
-        }
-    }
-
-    private void ensureProtocolAvailableForUpdate(String protocolNumber,
-                                                  UUID solicitationId) {
+    private void ensureProtocolAvailable(
+            String protocolNumber,
+            UUID reimbursementId,
+            UUID ignoredSolicitationId
+    ) {
         if (isBlank(protocolNumber)) {
             return;
         }
 
         Solicitation existing = Solicitation.find(
-                "protocolNumber",
+                "reimbursement.id = ?1 "
+                        + "and protocolNumber = ?2",
+                reimbursementId,
                 protocolNumber.trim()
         ).firstResult();
 
-        if (existing != null && !existing.getId().equals(solicitationId)) {
+        if (existing != null
+                && !existing.getId().equals(
+                        ignoredSolicitationId
+                )) {
             throw new WebApplicationException(
-                    "Já existe uma solicitação com este protocolo.",
+                    "Este protocolo já foi utilizado neste reembolso.",
                     Response.Status.CONFLICT
-            );
-        }
-    }
-
-    private void ensureReimbursementExists(Reimbursement reimbursement) {
-        if (reimbursement == null) {
-            throw new WebApplicationException(
-                    "Reembolso não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
-        }
-    }
-
-    private void ensureSolicitationExists(Solicitation solicitation) {
-        if (solicitation == null) {
-            throw new WebApplicationException(
-                    "Solicitação não encontrada.",
-                    Response.Status.NOT_FOUND
             );
         }
     }

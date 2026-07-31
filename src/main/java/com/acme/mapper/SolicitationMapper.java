@@ -1,5 +1,6 @@
 package com.acme.mapper;
 
+import com.acme.domain.enums.SolicitationStatus;
 import com.acme.domain.model.Reimbursement;
 import com.acme.domain.model.Solicitation;
 import com.acme.dto.request.create.CreateSolicitationRequest;
@@ -10,48 +11,37 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class SolicitationMapper {
 
-    public Solicitation toEntity(CreateSolicitationRequest request,
-                                 Reimbursement reimbursement,
-                                 Integer attemptNumber) {
-
+    public Solicitation toEntity(
+            CreateSolicitationRequest request,
+            Reimbursement reimbursement,
+            Integer attemptNumber,
+            SolicitationStatus initialStatus
+    ) {
         Solicitation solicitation = new Solicitation();
-
         solicitation.setReimbursement(reimbursement);
         solicitation.setAttemptNumber(attemptNumber);
-        solicitation.setStatus(request.status());
-        solicitation.setProtocolNumber(trimOrNull(request.protocolNumber()));
-        solicitation.setRequestDate(request.requestDate());
-        solicitation.setReimbursementDate(request.reimbursementDate());
-        solicitation.setAmountReceived(request.amountReceived());
+        solicitation.setStatus(initialStatus);
         solicitation.setNote(trimOrNull(request.note()));
-
         return solicitation;
     }
 
-    public Solicitation updateEntity(UpdateSolicitationRequest request,
-                                     Solicitation solicitation) {
-
+    public Solicitation updateEntity(
+            UpdateSolicitationRequest request,
+            Solicitation solicitation
+    ) {
         solicitation.setStatus(request.status());
         solicitation.setProtocolNumber(trimOrNull(request.protocolNumber()));
         solicitation.setRequestDate(request.requestDate());
         solicitation.setReimbursementDate(request.reimbursementDate());
         solicitation.setAmountReceived(request.amountReceived());
         solicitation.setNote(trimOrNull(request.note()));
-
         return solicitation;
     }
 
     public SolicitationResponse toResponse(Solicitation solicitation) {
-
-        Reimbursement reimbursement = solicitation.getReimbursement();
-
         return new SolicitationResponse(
                 solicitation.getId(),
-                reimbursement.getId(),
-                reimbursement.getDependent().getId(),
-                reimbursement.getDependent().getName(),
-                reimbursement.getTherapyType().getId(),
-                reimbursement.getTherapyType().getName(),
+                solicitation.getReimbursement().getId(),
                 solicitation.getAttemptNumber(),
                 solicitation.getStatus(),
                 solicitation.getProtocolNumber(),
@@ -63,11 +53,6 @@ public class SolicitationMapper {
     }
 
     private String trimOrNull(String value) {
-
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-
-        return value.trim();
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }
