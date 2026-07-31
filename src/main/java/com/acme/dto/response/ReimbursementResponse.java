@@ -8,13 +8,21 @@ public record ReimbursementResponse(
 
         UUID id,
 
+        UUID therapyId,
+
         UUID dependentId,
 
         String dependentName,
 
-        UUID therapyTypeId,
+        UUID professionalId,
 
-        String therapyTypeName,
+        String professionalName,
+
+        String professionalPixKey,
+
+        UUID specialtyId,
+
+        String specialtyName,
 
         LocalDate referenceMonth,
 
@@ -23,10 +31,6 @@ public record ReimbursementResponse(
         BigDecimal sessionValue,
 
         BigDecimal totalAmount,
-
-        String therapistName,
-
-        String therapistPix,
 
         String description
 

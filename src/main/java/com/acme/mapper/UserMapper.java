@@ -7,44 +7,44 @@ import com.acme.dto.request.update.UpdateUserRequest;
 import com.acme.dto.response.UserResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.util.Locale;
+
 @ApplicationScoped
 public class UserMapper {
 
-    public User toEntity(CreateUserRequest request,
-                         Family family) {
-
+    public User toEntity(
+            CreateUserRequest request,
+            Family family,
+            String passwordHash
+    ) {
         User user = new User();
-
-        user.setName(request.name());
-        user.setEmail(request.email());
-        user.setPassword(request.password());
+        user.setName(request.name().trim());
+        user.setEmail(normalizeEmail(request.email()));
+        user.setPasswordHash(passwordHash);
         user.setRole(request.role());
         user.setFamily(family);
-
         return user;
     }
 
-    public User updateEntity(UpdateUserRequest request,
-                             User user,
-                             Family family) {
-
-        user.setName(request.name());
-        user.setEmail(request.email());
+    public User updateEntity(UpdateUserRequest request, User user) {
+        user.setName(request.name().trim());
+        user.setEmail(normalizeEmail(request.email()));
         user.setRole(request.role());
-        user.setFamily(family);
-
         return user;
     }
 
-    public UserResponse toResponse(User entity) {
-
+    public UserResponse toResponse(User user) {
         return new UserResponse(
-                entity.getId(),
-                entity.getName(),
-                entity.getEmail(),
-                entity.getRole(),
-                entity.getFamily().getId(),
-                entity.getFamily().getName()
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getRole(),
+                user.getFamily().getId(),
+                user.getFamily().getName()
         );
+    }
+
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

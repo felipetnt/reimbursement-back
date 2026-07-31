@@ -1,6 +1,12 @@
 package com.acme.domain.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -13,18 +19,15 @@ public class Dependent extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(name = "birth_date")
+    @Column(name = "birth_date", nullable = false)
     private LocalDate birthDate;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_id", nullable = false)
     private Family family;
 
-    @OneToMany(mappedBy = "dependent", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<TherapyType> therapyTypes = new ArrayList<>();
-
     @OneToMany(mappedBy = "dependent")
-    private List<Reimbursement> reimbursements = new ArrayList<>();
+    private List<Therapy> therapies = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -50,39 +53,17 @@ public class Dependent extends BaseEntity {
         this.family = family;
     }
 
-    public List<TherapyType> getTherapyTypes() {
-        return therapyTypes;
+    public List<Therapy> getTherapies() {
+        return therapies;
     }
 
-    public void setTherapyTypes(List<TherapyType> therapyTypes) {
-        this.therapyTypes = therapyTypes;
+    public void addTherapy(Therapy therapy) {
+        therapies.add(therapy);
+        therapy.setDependent(this);
     }
 
-    public List<Reimbursement> getReimbursements() {
-        return reimbursements;
-    }
-
-    public void setReimbursements(List<Reimbursement> reimbursements) {
-        this.reimbursements = reimbursements;
-    }
-
-    public void addTherapyType(TherapyType therapyType) {
-        therapyTypes.add(therapyType);
-        therapyType.setDependent(this);
-    }
-
-    public void removeTherapyType(TherapyType therapyType) {
-        therapyTypes.remove(therapyType);
-        therapyType.setDependent(null);
-    }
-
-    public void addReimbursement(Reimbursement reimbursement) {
-        reimbursements.add(reimbursement);
-        reimbursement.setDependent(this);
-    }
-
-    public void removeReimbursement(Reimbursement reimbursement) {
-        reimbursements.remove(reimbursement);
-        reimbursement.setDependent(null);
+    public void removeTherapy(Therapy therapy) {
+        therapies.remove(therapy);
+        therapy.setDependent(null);
     }
 }

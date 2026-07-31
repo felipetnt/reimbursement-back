@@ -2,9 +2,13 @@ package com.acme.service;
 
 import com.acme.domain.model.Dependent;
 import com.acme.domain.model.Family;
+import com.acme.domain.model.Reimbursement;
+import com.acme.domain.model.Therapy;
 import com.acme.dto.request.create.CreateDependentRequest;
 import com.acme.dto.request.update.UpdateDependentRequest;
+import com.acme.dto.response.DependentDetailsResponse;
 import com.acme.dto.response.DependentResponse;
+import com.acme.mapper.DependentDetailsMapper;
 import com.acme.mapper.DependentMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -14,7 +18,6 @@ import jakarta.ws.rs.core.Response;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class DependentService {
@@ -22,39 +25,88 @@ public class DependentService {
     @Inject
     DependentMapper mapper;
 
+    @Inject
+    DependentDetailsMapper detailsMapper;
+
+    @Inject
+    FamilyAccessService familyAccessService;
+
+    @Inject
+    CurrentUserService currentUserService;
+
     public List<DependentResponse> list() {
-        return Dependent.<Dependent>listAll()
+        UUID familyId =
+                familyAccessService.getCurrentFamilyId();
+
+        return Dependent.<Dependent>list(
+                        "family.id = ?1 order by name",
+                        familyId
+                )
                 .stream()
                 .map(mapper::toResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public DependentResponse findById(UUID id) {
-        Dependent dependent = Dependent.findById(id);
-
-        ensureDependentExists(dependent);
-
-        return mapper.toResponse(dependent);
+        return mapper.toResponse(
+                findScopedDependent(id)
+        );
     }
 
-    public List<DependentResponse> listByFamily(UUID familyId) {
-        Family family = Family.findById(familyId);
+    public DependentDetailsResponse findDetails(
+            UUID id
+    ) {
+        Dependent dependent =
+                findScopedDependent(id);
 
-        ensureFamilyExists(family);
+        UUID familyId =
+                familyAccessService.getCurrentFamilyId();
 
-        return Dependent.<Dependent>list("family.id", familyId)
-                .stream()
-                .map(mapper::toResponse)
-                .collect(Collectors.toList());
+        List<Therapy> therapies = Therapy.list(
+                "dependent.id = ?1 "
+                        + "and dependent.family.id = ?2 "
+                        + "order by active desc, "
+                        + "startDate desc",
+                dependent.getId(),
+                familyId
+        );
+
+        List<Reimbursement> reimbursements =
+                Reimbursement.list(
+                        "therapy.dependent.id = ?1 "
+                                + "and therapy.dependent."
+                                + "family.id = ?2 "
+                                + "order by "
+                                + "referenceMonth desc",
+                        dependent.getId(),
+                        familyId
+                );
+
+        return detailsMapper.toResponse(
+                dependent,
+                therapies,
+                reimbursements
+        );
     }
 
     @Transactional
-    public DependentResponse create(CreateDependentRequest request) {
-        Family family = Family.findById(request.familyId());
+    public DependentResponse create(
+            CreateDependentRequest request
+    ) {
+        currentUserService.requireWritePermission();
 
-        ensureFamilyExists(family);
+        familyAccessService
+                .ensureRequestUsesCurrentFamily(
+                        request.familyId()
+                );
 
-        Dependent dependent = mapper.toEntity(request, family);
+        Family family =
+                familyAccessService.getCurrentFamily();
+
+        Dependent dependent = mapper.toEntity(
+                request,
+                family
+        );
 
         dependent.persist();
 
@@ -62,44 +114,59 @@ public class DependentService {
     }
 
     @Transactional
-    public DependentResponse update(UUID id, UpdateDependentRequest request) {
-        Dependent dependentBeforeUpdate = Dependent.findById(id);
+    public DependentResponse update(
+            UUID id,
+            UpdateDependentRequest request
+    ) {
+        currentUserService.requireWritePermission();
 
-        ensureDependentExists(dependentBeforeUpdate);
+        Dependent dependent =
+                findScopedDependent(id);
 
-        Family family = Family.findById(request.familyId());
-
-        ensureFamilyExists(family);
-
-        Dependent dependent = mapper.updateEntity(request, dependentBeforeUpdate, family);
+        mapper.updateEntity(request, dependent);
 
         return mapper.toResponse(dependent);
     }
 
     @Transactional
     public void delete(UUID id) {
-        Dependent dependent = Dependent.findById(id);
+        currentUserService.requireAdmin();
 
-        ensureDependentExists(dependent);
+        Dependent dependent =
+                findScopedDependent(id);
+
+        long therapyCount = Therapy.count(
+                "dependent.id = ?1",
+                dependent.getId()
+        );
+
+        if (therapyCount > 0) {
+            throw new WebApplicationException(
+                    "Não é possível excluir um dependente que possui terapias ou histórico financeiro.",
+                    Response.Status.CONFLICT
+            );
+        }
 
         dependent.delete();
     }
 
-    private void ensureFamilyExists(Family family) {
-        if (family == null) {
-            throw new WebApplicationException(
-                    "Família não encontrada.",
-                    Response.Status.NOT_FOUND
-            );
-        }
-    }
+    private Dependent findScopedDependent(UUID id) {
+        UUID familyId =
+                familyAccessService.getCurrentFamilyId();
 
-    private void ensureDependentExists(Dependent dependent) {
+        Dependent dependent = Dependent.find(
+                "id = ?1 and family.id = ?2",
+                id,
+                familyId
+        ).firstResult();
+
         if (dependent == null) {
             throw new WebApplicationException(
                     "Dependente não encontrado.",
                     Response.Status.NOT_FOUND
             );
         }
+
+        return dependent;
     }
 }
