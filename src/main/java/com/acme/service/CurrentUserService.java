@@ -29,14 +29,16 @@ public class CurrentUserService {
     public UUID getFamilyId() {
         Object familyIdClaim = jwt.getClaim("familyId");
 
-        if (familyIdClaim == null
-                || familyIdClaim.toString().isBlank()) {
+        boolean familyIsMissing = familyIdClaim == null || familyIdClaim.toString().isBlank();
+
+        if (familyIsMissing) {
+            if (hasRole(UserRole.ADMIN)) {
+                return null;
+            }
             throw unauthorized();
         }
 
-        return parseUuid(
-                familyIdClaim.toString(),
-                "familyId"
+        return parseUuid(familyIdClaim.toString(), "familyId"
         );
     }
 

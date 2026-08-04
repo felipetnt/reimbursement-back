@@ -1,7 +1,7 @@
 package com.acme.service;
 
 import com.acme.domain.model.User;
-import com.acme.dto.auth.LoginRequest;
+import com.acme.dto.request.auth.LoginRequest;
 import com.acme.dto.response.AuthResponse;
 import com.acme.mapper.AuthMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,27 +24,10 @@ public class AuthService {
     AuthMapper authMapper;
 
     public AuthResponse login(LoginRequest request) {
-        String normalizedEmail =
-                normalizeEmail(request.email());
+        String normalizedEmail = normalizeEmail(request.email());
+        User user = User.find("lower(email) = ?1", normalizedEmail).firstResult();
 
-        User user = User.find(
-                "lower(email) = ?1",
-                normalizedEmail
-        ).firstResult();
-
-        boolean validCredentials =
-                user != null
-                        && passwordService.matches(
-                        request.password(),
-                        user.getPasswordHash()
-                );
-
-        if (!validCredentials) {
-            throw new WebApplicationException(
-                    "E-mail ou senha inválidos.",
-                    Response.Status.UNAUTHORIZED
-            );
-        }
+        validCredentials(user, request);
 
         String accessToken = jwtService.generate(user);
 
@@ -59,5 +42,16 @@ public class AuthService {
         return email
                 .trim()
                 .toLowerCase(Locale.ROOT);
+    }
+
+    public void validCredentials(User user, LoginRequest request){
+        boolean validCredentials = user != null && passwordService.matches(request.password(), user.getPasswordHash());
+
+        if (!validCredentials) {
+            throw new WebApplicationException(
+                    "E-mail ou senha inválidos.",
+                    Response.Status.UNAUTHORIZED
+            );
+        }
     }
 }

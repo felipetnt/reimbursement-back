@@ -70,14 +70,8 @@ public class DependentResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Busca um dependente pelo ID")
-    @APIResponse(
-            responseCode = "200",
-            description = "Dependente encontrado"
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Dependente não encontrado"
-    )
+    @APIResponse(responseCode = "200", description = "Dependente encontrado")
+    @APIResponse(responseCode = "404", description = "Dependente não encontrado")
     public DependentResponse findById(
             @PathParam("id") UUID id
     ) {
@@ -87,18 +81,9 @@ public class DependentResource {
     @POST
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Cria um novo dependente")
-    @APIResponse(
-            responseCode = "201",
-            description = "Dependente criado com sucesso"
-    )
-    @APIResponse(
-            responseCode = "400",
-            description = "Dados inválidos"
-    )
-    @APIResponse(
-            responseCode = "403",
-            description = "Família inválida ou usuário sem permissão"
-    )
+    @APIResponse(responseCode = "201", description = "Dependente criado com sucesso")
+    @APIResponse(responseCode = "400", description = "Dados inválidos")
+    @APIResponse(responseCode = "403", description = "Família inválida ou usuário sem permissão")
     public Response create(
             @Valid CreateDependentRequest request
     ) {
@@ -114,18 +99,9 @@ public class DependentResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Atualiza um dependente")
-    @APIResponse(
-            responseCode = "200",
-            description = "Dependente atualizado com sucesso"
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Dependente não encontrado"
-    )
-    public DependentResponse update(
-            @PathParam("id") UUID id,
-            @Valid UpdateDependentRequest request
-    ) {
+    @APIResponse(responseCode = "200", description = "Dependente atualizado com sucesso")
+    @APIResponse(responseCode = "404", description = "Dependente não encontrado")
+    public DependentResponse update(@PathParam("id") UUID id, @Valid UpdateDependentRequest request) {
         return service.update(id, request);
     }
 
@@ -133,14 +109,8 @@ public class DependentResource {
     @Path("/{id}")
     @RolesAllowed("ADMIN")
     @Operation(summary = "Remove um dependente")
-    @APIResponse(
-            responseCode = "204",
-            description = "Dependente removido com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "Dependente possui histórico vinculado"
-    )
+    @APIResponse(responseCode = "204", description = "Dependente removido com sucesso")
+    @APIResponse(responseCode = "409", description = "Dependente possui histórico vinculado")
     public Response delete(
             @PathParam("id") UUID id
     ) {

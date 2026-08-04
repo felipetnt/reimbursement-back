@@ -11,7 +11,7 @@ CREATE TABLE users (
    email VARCHAR(150) NOT NULL,
    password_hash VARCHAR(255) NOT NULL,
    role VARCHAR(30) NOT NULL,
-   family_id BINARY(16) NOT NULL,
+   family_id BINARY(16),
 
    CONSTRAINT pk_users PRIMARY KEY (id),
    CONSTRAINT uk_users_email UNIQUE (email),

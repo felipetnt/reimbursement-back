@@ -11,10 +11,7 @@ public class AuthMapper {
     @Inject
     UserMapper userMapper;
 
-    public AuthResponse toResponse(
-            String accessToken,
-            long expiresInSeconds,
-            User user
+    public AuthResponse toResponse(String accessToken, long expiresInSeconds, User user
     ) {
         return new AuthResponse(
                 accessToken,

@@ -28,7 +28,7 @@ public class User extends BaseEntity {
     private UserRole role;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "family_id", nullable = false)
+    @JoinColumn(name = "family_id")
     private Family family;
 
     public String getName() {

@@ -8,6 +8,7 @@ import com.acme.dto.response.UserResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.Locale;
+import java.util.UUID;
 
 @ApplicationScoped
 public class UserMapper {
@@ -34,13 +35,23 @@ public class UserMapper {
     }
 
     public UserResponse toResponse(User user) {
+        Family family = user.getFamily();
+
+        UUID familyId = null;
+        String familyName = null;
+
+        if(family != null) {
+            familyId = family.getId();
+            familyName = family.getName();
+        }
+
         return new UserResponse(
                 user.getId(),
                 user.getName(),
                 user.getEmail(),
                 user.getRole(),
-                user.getFamily().getId(),
-                user.getFamily().getName()
+                familyId,
+                familyName
         );
     }
 
