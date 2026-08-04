@@ -3,7 +3,7 @@ package com.acme.service;
 import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Family;
 import com.acme.domain.model.User;
-import com.acme.dto.auth.InitializeSystemRequest;
+import com.acme.dto.request.auth.InitializeSystemRequest;
 import com.acme.dto.response.AuthResponse;
 import com.acme.mapper.AuthMapper;
 import jakarta.enterprise.context.ApplicationScoped;

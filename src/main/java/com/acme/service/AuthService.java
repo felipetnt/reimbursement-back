@@ -1,7 +1,7 @@
 package com.acme.service;
 
 import com.acme.domain.model.User;
-import com.acme.dto.auth.LoginRequest;
+import com.acme.dto.request.auth.LoginRequest;
 import com.acme.dto.response.AuthResponse;
 import com.acme.mapper.AuthMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -32,12 +32,7 @@ public class AuthService {
                 normalizedEmail
         ).firstResult();
 
-        boolean validCredentials =
-                user != null
-                        && passwordService.matches(
-                        request.password(),
-                        user.getPasswordHash()
-                );
+        boolean validCredentials = user != null && passwordService.matches(request.password(), user.getPasswordHash());
 
         if (!validCredentials) {
             throw new WebApplicationException(
@@ -48,10 +43,7 @@ public class AuthService {
 
         String accessToken = jwtService.generate(user);
 
-        return authMapper.toResponse(
-                accessToken,
-                jwtService.getExpiresInSeconds(),
-                user
+        return authMapper.toResponse(accessToken, jwtService.getExpiresInSeconds(), user
         );
     }
 

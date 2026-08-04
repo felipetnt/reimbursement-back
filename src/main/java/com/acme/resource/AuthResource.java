@@ -1,6 +1,6 @@
 package com.acme.resource;
 
-import com.acme.dto.auth.LoginRequest;
+import com.acme.dto.request.auth.LoginRequest;
 import com.acme.dto.response.AuthResponse;
 import com.acme.service.AuthService;
 import jakarta.inject.Inject;
