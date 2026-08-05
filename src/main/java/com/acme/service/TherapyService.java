@@ -195,51 +195,29 @@ public class TherapyService {
         UUID familyId =
                 familyAccessService.getCurrentFamilyId();
 
-        Professional professional = Professional.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        Professional professional = Professional.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
 
         if (professional == null) {
-            throw new WebApplicationException(
-                    "Profissional não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Profissional não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return professional;
     }
 
-    private void validateDates(
-            LocalDate startDate,
-            LocalDate endDate
+    private void validateDates(LocalDate startDate, LocalDate endDate
     ) {
-        if (endDate != null
-                && endDate.isBefore(startDate)) {
-            throw new WebApplicationException(
-                    "A data final não pode ser anterior à data inicial.",
-                    Response.Status.BAD_REQUEST
-            );
+        if (endDate != null && endDate.isBefore(startDate)) {
+            throw new WebApplicationException("A data final não pode ser anterior à data inicial.", Response.Status.BAD_REQUEST);
         }
     }
 
-    private void ensureNoActiveDuplicate(
-            UUID dependentId,
-            UUID professionalId
-    ) {
+    private void ensureNoActiveDuplicate(UUID dependentId, UUID professionalId) {
         long count = Therapy.count(
-                "dependent.id = ?1 "
-                        + "and professional.id = ?2 "
-                        + "and active = true",
-                dependentId,
-                professionalId
+                "dependent.id = ?1 and professional.id = ?2 and active = true", dependentId, professionalId
         );
 
         if (count > 0) {
-            throw new WebApplicationException(
-                    "Já existe uma terapia ativa entre este dependente e este profissional.",
-                    Response.Status.CONFLICT
+            throw new WebApplicationException("Já existe uma terapia ativa entre este dependente e este profissional.", Response.Status.CONFLICT
             );
         }
     }

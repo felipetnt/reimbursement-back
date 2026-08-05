@@ -33,34 +33,21 @@ public class ProfessionalService {
         UUID familyId =
                 familyAccessService.getCurrentFamilyId();
 
-        return Professional.<Professional>list(
-                        "family.id = ?1 order by name",
-                        familyId
-                )
+        return Professional.<Professional>list("family.id = ?1 order by name", familyId)
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
     public ProfessionalResponse findById(UUID id) {
-        return mapper.toResponse(
-                findScopedProfessional(id)
-        );
+        return mapper.toResponse(findScopedProfessional(id));
     }
 
-    public List<ProfessionalResponse> listBySpecialty(
-            UUID specialtyId
-    ) {
-        Specialty specialty =
-                findScopedSpecialty(specialtyId);
+    public List<ProfessionalResponse> listBySpecialty(UUID specialtyId) {
+        Specialty specialty = findScopedSpecialty(specialtyId);
 
         return Professional.<Professional>list(
-                        "specialty.id = ?1 "
-                                + "and family.id = ?2 "
-                                + "order by name",
-                        specialty.getId(),
-                        familyAccessService.getCurrentFamilyId()
-                )
+                "specialty.id = ?1 and family.id = ?2 order by name", specialty.getId(), familyAccessService.getCurrentFamilyId())
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
@@ -73,24 +60,13 @@ public class ProfessionalService {
         currentUserService.requireWritePermission();
 
         familyAccessService
-                .ensureRequestUsesCurrentFamily(
-                        request.familyId()
-                );
+                .ensureCanAccessFamily(request.familyId());
 
-        Family family =
-                familyAccessService.getCurrentFamily();
+        Family family = familyAccessService.getCurrentFamily();
 
-        Specialty specialty =
-                findScopedSpecialty(
-                        request.specialtyId()
-                );
+        Specialty specialty = findScopedSpecialty(request.specialtyId());
 
-        Professional professional =
-                mapper.toEntity(
-                        request,
-                        family,
-                        specialty
-                );
+        Professional professional = mapper.toEntity(request, family, specialty);
 
         professional.persist();
 
@@ -128,15 +104,10 @@ public class ProfessionalService {
         Professional professional =
                 findScopedProfessional(id);
 
-        long therapyCount = Therapy.count(
-                "professional.id = ?1",
-                professional.getId()
-        );
+        long therapyCount = Therapy.count("professional.id = ?1", professional.getId());
 
         if (therapyCount > 0) {
-            throw new WebApplicationException(
-                    "Não é possível excluir um profissional que possui terapias vinculadas.",
-                    Response.Status.CONFLICT
+            throw new WebApplicationException("Não é possível excluir um profissional que possui terapias vinculadas.", Response.Status.CONFLICT
             );
         }
 
@@ -156,10 +127,7 @@ public class ProfessionalService {
         ).firstResult();
 
         if (professional == null) {
-            throw new WebApplicationException(
-                    "Profissional não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Profissional não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return professional;
@@ -169,17 +137,10 @@ public class ProfessionalService {
         UUID familyId =
                 familyAccessService.getCurrentFamilyId();
 
-        Specialty specialty = Specialty.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        Specialty specialty = Specialty.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
 
         if (specialty == null) {
-            throw new WebApplicationException(
-                    "Especialidade não encontrada.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Especialidade não encontrada.", Response.Status.NOT_FOUND);
         }
 
         return specialty;

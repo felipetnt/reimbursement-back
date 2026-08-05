@@ -104,18 +104,12 @@ public class SolicitationService {
     }
 
     @Transactional
-    public SolicitationResponse update(
-            UUID id,
-            UpdateSolicitationRequest request
-    ) {
+    public SolicitationResponse update(UUID id, UpdateSolicitationRequest request) {
         currentUserService.requireWritePermission();
 
-        Solicitation solicitation =
-                findScopedSolicitation(id);
+        Solicitation solicitation = findScopedSolicitation(id);
 
-        validateStatusTransition(
-                solicitation.getStatus(),
-                request.status()
+        validateStatusTransition(solicitation.getStatus(), request.status()
         );
 
         validateStatusRules(
@@ -132,10 +126,7 @@ public class SolicitationService {
                 solicitation.getId()
         );
 
-        mapper.updateEntity(
-                request,
-                solicitation
-        );
+        mapper.updateEntity(request, solicitation);
 
         return mapper.toResponse(solicitation);
     }
@@ -147,38 +138,19 @@ public class SolicitationService {
                 familyAccessService.getCurrentFamilyId();
 
         Solicitation solicitation =
-                Solicitation.find(
-                        "id = ?1 "
-                                + "and reimbursement.therapy."
-                                + "dependent.family.id = ?2",
-                        id,
-                        familyId
-                ).firstResult();
+                Solicitation.find("id = ?1 and reimbursement.therapy.dependent.family.id = ?2", id, familyId).firstResult();
 
         if (solicitation == null) {
-            throw new WebApplicationException(
-                    "Solicitação não encontrada.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Solicitação não encontrada.", Response.Status.NOT_FOUND);
         }
 
         return solicitation;
     }
 
-    private Reimbursement findScopedReimbursement(
-            UUID id
-    ) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Reimbursement findScopedReimbursement(UUID id) {
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
-        Reimbursement reimbursement =
-                Reimbursement.find(
-                        "id = ?1 "
-                                + "and therapy.dependent."
-                                + "family.id = ?2",
-                        id,
-                        familyId
-                ).firstResult();
+        Reimbursement reimbursement = Reimbursement.find("id = ?1 and therapy.dependent.family.id = ?2", id, familyId).firstResult();
 
         if (reimbursement == null) {
             throw new WebApplicationException(
@@ -190,36 +162,17 @@ public class SolicitationService {
         return reimbursement;
     }
 
-    private Integer getNextAttemptNumber(
-            UUID reimbursementId
-    ) {
-        Solicitation last = Solicitation.find(
-                "reimbursement.id = ?1 "
-                        + "order by attemptNumber desc",
-                reimbursementId
-        ).firstResult();
+    private Integer getNextAttemptNumber(UUID reimbursementId) {
+        Solicitation last = Solicitation.find("reimbursement.id = ?1 order by attemptNumber desc", reimbursementId).firstResult();
 
-        return last == null
-                ? 1
-                : last.getAttemptNumber() + 1;
+        return last == null ? 1 : last.getAttemptNumber() + 1;
     }
 
-    private void ensureCanCreateNewAttempt(
-            Reimbursement reimbursement
-    ) {
-        Solicitation last = Solicitation.find(
-                "reimbursement.id = ?1 "
-                        + "order by attemptNumber desc",
-                reimbursement.getId()
-        ).firstResult();
+    private void ensureCanCreateNewAttempt(Reimbursement reimbursement) {
+        Solicitation last = Solicitation.find("reimbursement.id = ?1 " + "order by attemptNumber desc", reimbursement.getId()).firstResult();
 
-        if (last != null
-                && last.getStatus()
-                != SolicitationStatus.DENIED) {
-            throw new WebApplicationException(
-                    "Uma nova tentativa só pode ser criada quando a última solicitação estiver negada.",
-                    Response.Status.CONFLICT
-            );
+        if (last != null && last.getStatus() != SolicitationStatus.DENIED) {
+            throw new WebApplicationException("Uma nova tentativa só pode ser criada quando a última solicitação estiver negada.", Response.Status.CONFLICT);
         }
     }
 
@@ -231,10 +184,7 @@ public class SolicitationService {
             BigDecimal amountReceived
     ) {
         if (status == null) {
-            throw new WebApplicationException(
-                    "Status é obrigatório.",
-                    Response.Status.BAD_REQUEST
-            );
+            throw new WebApplicationException("Status é obrigatório.",Response.Status.BAD_REQUEST);
         }
 
         if (status == SolicitationStatus.NOT_REQUESTED) {
@@ -242,35 +192,20 @@ public class SolicitationService {
         }
 
         if (isBlank(protocolNumber)) {
-            throw new WebApplicationException(
-                    "Protocolo é obrigatório a partir do envio da solicitação.",
-                    Response.Status.BAD_REQUEST
-            );
+            throw new WebApplicationException("Protocolo é obrigatório a partir do envio da solicitação.", Response.Status.BAD_REQUEST);
         }
 
         if (requestDate == null) {
-            throw new WebApplicationException(
-                    "Data da solicitação é obrigatória a partir do envio.",
-                    Response.Status.BAD_REQUEST
-            );
+            throw new WebApplicationException("Data da solicitação é obrigatória a partir do envio.", Response.Status.BAD_REQUEST);
         }
 
         if (status == SolicitationStatus.REIMBURSED) {
             if (reimbursementDate == null) {
-                throw new WebApplicationException(
-                        "Data de reembolso é obrigatória para o status REIMBURSED.",
-                        Response.Status.BAD_REQUEST
-                );
+                throw new WebApplicationException("Data de reembolso é obrigatória para o status REIMBURSED.", Response.Status.BAD_REQUEST);
             }
 
-            if (amountReceived == null
-                    || amountReceived.compareTo(
-                    BigDecimal.ZERO
-            ) <= 0) {
-                throw new WebApplicationException(
-                        "Valor recebido deve ser maior que zero para o status REIMBURSED.",
-                        Response.Status.BAD_REQUEST
-                );
+            if (amountReceived == null || amountReceived.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new WebApplicationException("Valor recebido deve ser maior que zero para o status REIMBURSED.", Response.Status.BAD_REQUEST);
             }
         }
     }
@@ -280,10 +215,7 @@ public class SolicitationService {
             SolicitationStatus newStatus
     ) {
         if (newStatus == null) {
-            throw new WebApplicationException(
-                    "Novo status é obrigatório.",
-                    Response.Status.BAD_REQUEST
-            );
+            throw new WebApplicationException("Novo status é obrigatório.", Response.Status.BAD_REQUEST);
         }
 
         if (currentStatus == newStatus) {

@@ -16,7 +16,13 @@ public class FamilyAccessService {
     CurrentUserService currentUserService;
 
     public UUID getCurrentFamilyId() {
-        return currentUserService.getFamilyId();
+        UUID familyId = currentUserService.getFamilyId();
+
+        if (familyId == null) {
+            throw new WebApplicationException("O administrador deve informar a família que deseja acessar.", Response.Status.BAD_REQUEST);
+        }
+
+        return familyId;
     }
 
     public Family getCurrentFamily() {
@@ -31,31 +37,33 @@ public class FamilyAccessService {
         return family;
     }
 
-    public Family getAcessibleFamily(UUID requestedFamilyid){
-        if(requestedFamilyid == null){
-            throw new WebApplicationException("A família requisitada não foi encontrada.", Response.Status.UNAUTHORIZED);
+    public Family getAccessibleFamily(UUID requestedFamilyId) {
+        if (requestedFamilyId == null) {
+            throw new WebApplicationException("O ID da família é obrigatório.", Response.Status.BAD_REQUEST);
         }
 
-        if(!currentUserService.hasRole(UserRole.ADMIN)){
-            if(requestedFamilyid == currentUserService.getFamilyId()){
-                throw new WebApplicationException("Conflito de famílias, a familia requisitada esta sendo acessada", Response.Status.CONFLICT);
-            }
+        ensureCanAccessFamily(requestedFamilyId);
+
+        Family family = Family.findById(requestedFamilyId);
+
+        if (family == null) {
+            throw new WebApplicationException("Família não encontrada.", Response.Status.NOT_FOUND);
         }
 
-        Family family = Family.findById(requestedFamilyid);
-        if(family == null){
-            throw new WebApplicationException("");
-        }
+        return family;
     }
 
-    public void ensureRequestUsesCurrentFamily(
-            UUID requestedFamilyId
-    ) {
+    public void ensureCanAccessFamily(UUID requestedFamilyId) {
+        if (requestedFamilyId == null) {
+            throw new WebApplicationException("O ID da família é obrigatório.", Response.Status.BAD_REQUEST);
+        }
 
-        if (!getCurrentFamilyId().equals(requestedFamilyId)) {
-            throw new WebApplicationException("Não é permitido acessar ou cadastrar dados em outra família.", Response.Status.FORBIDDEN);
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return;
+        }
+
+        if (requestedFamilyId.equals(getCurrentFamilyId())) {
+            throw new WebApplicationException("Você não possui permissão para acessar outra família.", Response.Status.FORBIDDEN);
         }
     }
-
-
 }

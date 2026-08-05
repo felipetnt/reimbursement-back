@@ -35,32 +35,22 @@ public class DependentService {
     CurrentUserService currentUserService;
 
     public List<DependentResponse> list() {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
-        return Dependent.<Dependent>list(
-                        "family.id = ?1 order by name",
-                        familyId
-                )
+        return Dependent.<Dependent>list("family.id = ?1 order by name", familyId)
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
     public DependentResponse findById(UUID id) {
-        return mapper.toResponse(
-                findScopedDependent(id)
-        );
+        return mapper.toResponse(findScopedDependent(id));
     }
 
-    public DependentDetailsResponse findDetails(
-            UUID id
-    ) {
-        Dependent dependent =
-                findScopedDependent(id);
+    public DependentDetailsResponse findDetails(UUID id) {
+        Dependent dependent = findScopedDependent(id);
 
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
         List<Therapy> therapies = Therapy.list(
                 "dependent.id = ?1 "
@@ -90,15 +80,10 @@ public class DependentService {
     }
 
     @Transactional
-    public DependentResponse create(
-            CreateDependentRequest request
-    ) {
+    public DependentResponse create(CreateDependentRequest request) {
         currentUserService.requireWritePermission();
 
-        familyAccessService
-                .ensureRequestUsesCurrentFamily(
-                        request.familyId()
-                );
+        familyAccessService.ensureCanAccessFamily(request.familyId());
 
         Family family =
                 familyAccessService.getCurrentFamily();

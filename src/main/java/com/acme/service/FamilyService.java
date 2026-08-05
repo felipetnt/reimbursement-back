@@ -31,15 +31,13 @@ public class FamilyService {
     MyFamilyMapper myFamilyMapper;
 
     public FamilyResponse getMyFamily() {
-        Family family =
-                familyAccessService.getCurrentFamily();
+        Family family = familyAccessService.getCurrentFamily();
 
         return familyMapper.toResponse(family);
     }
 
     public MyFamilyResponse getMyFamilyDetails() {
-        Family family =
-                familyAccessService.getCurrentFamily();
+        Family family = familyAccessService.getCurrentFamily();
 
         UUID familyId = family.getId();
 
@@ -61,13 +59,10 @@ public class FamilyService {
     }
 
     @Transactional
-    public FamilyResponse updateMyFamily(
-            UpdateFamilyRequest request
-    ) {
+    public FamilyResponse updateMyFamily(UpdateFamilyRequest request) {
         currentUserService.requireAdmin();
 
-        Family family =
-                familyAccessService.getCurrentFamily();
+        Family family = familyAccessService.getCurrentFamily();
 
         familyMapper.updateEntity(request, family);
 

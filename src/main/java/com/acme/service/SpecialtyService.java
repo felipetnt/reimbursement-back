@@ -54,7 +54,7 @@ public class SpecialtyService {
         currentUserService.requireWritePermission();
 
         familyAccessService
-                .ensureRequestUsesCurrentFamily(
+                .ensureCanAccessFamily(
                         request.familyId()
                 );
 

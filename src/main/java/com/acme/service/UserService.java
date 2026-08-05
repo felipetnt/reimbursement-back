@@ -34,187 +34,184 @@ public class UserService {
     CurrentUserService currentUserService;
 
     public List<UserResponse> list() {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return User.<User>list("order by name")
+                    .stream()
+                    .map(mapper::toResponse)
+                    .toList();
+        }
 
-        return User.<User>list(
-                        "family.id = ?1 order by name",
-                        familyId
-                )
+        UUID familyId = familyAccessService.getCurrentFamilyId();
+
+        return User.<User>list("family.id = ?1 order by name", familyId)
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
     public UserResponse findById(UUID id) {
-        return mapper.toResponse(findScopedUser(id));
+        return mapper.toResponse(findAccessibleUser(id));
     }
 
     public UserResponse getMe() {
-        return mapper.toResponse(
-                findScopedUser(
-                        currentUserService.getUserId()
-                )
-        );
+        User user = User.findById(currentUserService.getUserId());
+
+        if (user == null) {
+            throw new WebApplicationException("Usuário autenticado não encontrado.", Response.Status.UNAUTHORIZED);
+        }
+
+        return mapper.toResponse(user);
     }
 
     @Transactional
-    public UserResponse create(
-            CreateUserRequest request
-    ) {
-        currentUserService.requireAdmin();
+    public UserResponse create(CreateUserRequest request) {
+        currentUserService.requireWritePermission();
 
-        familyAccessService
-                .ensureRequestUsesCurrentFamily(
-                        request.familyId()
-                );
+        boolean currentUserIsAdmin = currentUserService.hasRole(UserRole.ADMIN);
+
+        if (!currentUserIsAdmin && request.role() == UserRole.ADMIN) {
+            throw new WebApplicationException("Um usuário da família não pode criar administradores.", Response.Status.FORBIDDEN);
+        }
+
+        Family family = resolveFamilyForCreation(request, currentUserIsAdmin);
 
         ensureEmailAvailable(request.email());
 
-        Family family =
-                familyAccessService.getCurrentFamily();
+        String passwordHash = passwordService.hash(request.password());
 
-        String passwordHash =
-                passwordService.hash(request.password());
-
-        User user = mapper.toEntity(
-                request,
-                family,
-                passwordHash
-        );
-
+        User user = mapper.toEntity(request, family, passwordHash);
         user.persist();
 
         return mapper.toResponse(user);
     }
 
     @Transactional
-    public UserResponse update(
-            UUID id,
-            UpdateUserRequest request
-    ) {
-        currentUserService.requireAdmin();
+    public UserResponse update(UUID id, UpdateUserRequest request) {
+        currentUserService.requireWritePermission();
 
-        User user = findScopedUser(id);
+        User user = findAccessibleUser(id);
 
-        ensureEmailAvailableForUpdate(
-                request.email(),
-                id
-        );
+        validateRoleUpdate(user, request.role());
+        ensureEmailAvailableForUpdate(request.email(), id);
 
         mapper.updateEntity(request, user);
+
+        if (request.role() == UserRole.ADMIN) {
+            user.setFamily(null);
+        }
 
         return mapper.toResponse(user);
     }
 
     @Transactional
-    public void changeMyPassword(
-            ChangePasswordRequest request
-    ) {
-        User user = findScopedUser(
-                currentUserService.getUserId()
-        );
+    public void changeMyPassword(ChangePasswordRequest request) {
+        User user = User.findById(currentUserService.getUserId());
 
-        if (!passwordService.matches(
-                request.currentPassword(),
-                user.getPasswordHash()
-        )) {
-            throw new WebApplicationException(
-                    "A senha atual está incorreta.",
-                    Response.Status.BAD_REQUEST
-            );
+        if (user == null) {
+            throw new WebApplicationException("Usuário autenticado não encontrado.", Response.Status.UNAUTHORIZED);
         }
 
-        if (passwordService.matches(
-                request.newPassword(),
-                user.getPasswordHash()
-        )) {
-            throw new WebApplicationException(
-                    "A nova senha deve ser diferente da senha atual.",
-                    Response.Status.BAD_REQUEST
-            );
+        if (!passwordService.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new WebApplicationException("A senha atual está incorreta.", Response.Status.BAD_REQUEST);
         }
 
-        user.setPasswordHash(
-                passwordService.hash(
-                        request.newPassword()
-                )
-        );
+        if (passwordService.matches(request.newPassword(), user.getPasswordHash())) {
+            throw new WebApplicationException("A nova senha deve ser diferente da senha atual.", Response.Status.BAD_REQUEST);
+        }
+
+        user.setPasswordHash(passwordService.hash(request.newPassword()));
     }
 
     @Transactional
     public void delete(UUID id) {
-        currentUserService.requireAdmin();
+        currentUserService.requireWritePermission();
 
-        User user = findScopedUser(id);
+        User user = findAccessibleUser(id);
 
-        if (user.getId().equals(
-                currentUserService.getUserId()
-        )) {
-            throw new WebApplicationException(
-                    "Você não pode excluir o próprio usuário.",
-                    Response.Status.CONFLICT
-            );
+        if (user.getId().equals(currentUserService.getUserId())) {
+            throw new WebApplicationException("Você não pode excluir o próprio usuário.", Response.Status.CONFLICT);
         }
 
+        ensureCurrentUserCanManage(user);
         ensureIsNotLastAdmin(user);
 
         user.delete();
     }
 
-    private User findScopedUser(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Family resolveFamilyForCreation(CreateUserRequest request, boolean currentUserIsAdmin) {
+        if (request.role() == UserRole.ADMIN) {
+            return null;
+        }
 
-        User user = User.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        if (request.familyId() == null) {
+            throw new WebApplicationException(
+                    "A família é obrigatória para usuários e visualizadores.",
+                    Response.Status.BAD_REQUEST
+            );
+        }
+
+        if (currentUserIsAdmin) {
+            return familyAccessService.getAccessibleFamily(request.familyId());
+        }
+
+        familyAccessService.ensureCanAccessFamily(request.familyId());
+        return familyAccessService.getCurrentFamily();
+    }
+
+    private User findAccessibleUser(UUID id) {
+        User user;
+
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            user = User.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            user = User.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (user == null) {
-            throw new WebApplicationException(
-                    "Usuário não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Usuário não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return user;
     }
 
-    private void ensureEmailAvailable(String email) {
-        String normalizedEmail = normalizeEmail(email);
+    private void validateRoleUpdate(User user, UserRole requestedRole) {
+        boolean currentUserIsAdmin = currentUserService.hasRole(UserRole.ADMIN);
 
-        long count = User.count(
-                "lower(email) = ?1",
-                normalizedEmail
-        );
+        if (!currentUserIsAdmin && user.getRole() == UserRole.ADMIN) {
+            throw new WebApplicationException("Um usuário da família não pode alterar administradores.", Response.Status.FORBIDDEN);
+        }
 
-        if (count > 0) {
-            throw new WebApplicationException(
-                    "Já existe um usuário com este e-mail.",
-                    Response.Status.CONFLICT
-            );
+        if (!currentUserIsAdmin && requestedRole == UserRole.ADMIN) {
+            throw new WebApplicationException("Um usuário da família não pode promover usuários a administrador.", Response.Status.FORBIDDEN);
+        }
+
+        if (user.getRole() == UserRole.ADMIN && requestedRole != UserRole.ADMIN) {
+            throw new WebApplicationException("Não é possível remover o perfil de administrador sem informar uma família.", Response.Status.BAD_REQUEST);
         }
     }
 
-    private void ensureEmailAvailableForUpdate(
-            String email,
-            UUID userId
-    ) {
+    private void ensureCurrentUserCanManage(User user) {
+        if (!currentUserService.hasRole(UserRole.ADMIN) && user.getRole() == UserRole.ADMIN) {
+            throw new WebApplicationException("Um usuário da família não pode excluir administradores.", Response.Status.FORBIDDEN);
+        }
+    }
+
+    private void ensureEmailAvailable(String email) {
         String normalizedEmail = normalizeEmail(email);
+        long count = User.count("lower(email) = ?1", normalizedEmail);
 
-        User existing = User.find(
-                "lower(email) = ?1",
-                normalizedEmail
-        ).firstResult();
+        if (count > 0) {
+            throw new WebApplicationException("Já existe um usuário com este e-mail.", Response.Status.CONFLICT);
+        }
+    }
 
-        if (existing != null
-                && !existing.getId().equals(userId)) {
-            throw new WebApplicationException(
-                    "Já existe um usuário com este e-mail.",
-                    Response.Status.CONFLICT
-            );
+    private void ensureEmailAvailableForUpdate(String email, UUID userId) {
+        String normalizedEmail = normalizeEmail(email);
+        User existing = User.find("lower(email) = ?1", normalizedEmail).firstResult();
+
+        if (existing != null && !existing.getId().equals(userId)) {
+            throw new WebApplicationException("Já existe um usuário com este e-mail.", Response.Status.CONFLICT);
         }
     }
 
@@ -223,23 +220,14 @@ public class UserService {
             return;
         }
 
-        long adminCount = User.count(
-                "family.id = ?1 and role = ?2",
-                familyAccessService.getCurrentFamilyId(),
-                UserRole.ADMIN
-        );
+        long adminCount = User.count("role = ?1", UserRole.ADMIN);
 
         if (adminCount <= 1) {
-            throw new WebApplicationException(
-                    "A família precisa possuir pelo menos um administrador.",
-                    Response.Status.CONFLICT
-            );
+            throw new WebApplicationException("O sistema precisa possuir pelo menos um administrador.", Response.Status.CONFLICT);
         }
     }
 
     private String normalizeEmail(String email) {
-        return email
-                .trim()
-                .toLowerCase(Locale.ROOT);
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

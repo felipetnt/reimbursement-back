@@ -71,27 +71,14 @@ public class ReimbursementService {
                         reimbursement.getId()
                 );
 
-        return detailsMapper.toResponse(
-                reimbursement,
-                solicitations
-        );
+        return detailsMapper.toResponse(reimbursement, solicitations);
     }
 
-    public List<ReimbursementResponse> listByDependent(
-            UUID dependentId
-    ) {
-        Dependent dependent =
-                findScopedDependent(dependentId);
+    public List<ReimbursementResponse> listByDependent(UUID dependentId) {
+        Dependent dependent = findScopedDependent(dependentId);
 
         return Reimbursement.<Reimbursement>list(
-                        "therapy.dependent.id = ?1 "
-                                + "and therapy.dependent."
-                                + "family.id = ?2 "
-                                + "order by "
-                                + "referenceMonth desc",
-                        dependent.getId(),
-                        familyAccessService.getCurrentFamilyId()
-                )
+                "therapy.dependent.id = ?1 and therapy.dependent.family.id = ?2 order by referenceMonth desc", dependent.getId(), familyAccessService.getCurrentFamilyId())
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
@@ -159,29 +146,20 @@ public class ReimbursementService {
         ensureReimbursementIsDraft(reimbursement);
 
         LocalDate referenceMonth =
-                normalizeMonth(
-                        request.referenceMonth()
-                );
+                normalizeMonth(request.referenceMonth());
 
         validateReferenceMonth(
                 reimbursement.getTherapy(),
-                referenceMonth
-        );
+                referenceMonth);
 
         ensureMonthAvailable(
                 reimbursement.getTherapy().getId(),
                 referenceMonth,
-                reimbursement.getId()
-        );
+                reimbursement.getId());
 
-        mapper.updateEntity(
-                request,
-                reimbursement
-        );
+        mapper.updateEntity(request, reimbursement);
 
-        reimbursement.setReferenceMonth(
-                referenceMonth
-        );
+        reimbursement.setReferenceMonth(referenceMonth);
 
         return mapper.toResponse(reimbursement);
     }
@@ -219,9 +197,7 @@ public class ReimbursementService {
                 ).firstResult();
 
         if (reimbursement == null) {
-            throw new WebApplicationException(
-                    "Reembolso não encontrado.",
-                    Response.Status.NOT_FOUND
+            throw new WebApplicationException("Reembolso não encontrado.", Response.Status.NOT_FOUND
             );
         }
 
@@ -229,41 +205,24 @@ public class ReimbursementService {
     }
 
     private Therapy findScopedTherapy(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
-        Therapy therapy = Therapy.find(
-                "id = ?1 "
-                        + "and dependent.family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        Therapy therapy = Therapy.find("id = ?1 " + "and dependent.family.id = ?2", id, familyId).firstResult();
 
         if (therapy == null) {
-            throw new WebApplicationException(
-                    "Terapia não encontrada.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Terapia não encontrada.", Response.Status.NOT_FOUND);
         }
 
         return therapy;
     }
 
     private Dependent findScopedDependent(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
-        Dependent dependent = Dependent.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        Dependent dependent = Dependent.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
 
         if (dependent == null) {
-            throw new WebApplicationException(
-                    "Dependente não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Dependente não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return dependent;
@@ -275,43 +234,23 @@ public class ReimbursementService {
             UUID ignoredId
     ) {
         Reimbursement existing =
-                Reimbursement.find(
-                        "therapy.id = ?1 "
-                                + "and referenceMonth = ?2",
-                        therapyId,
-                        referenceMonth
-                ).firstResult();
+                Reimbursement.find("therapy.id = ?1 and referenceMonth = ?2", therapyId, referenceMonth).firstResult();
 
-        if (existing != null
-                && !existing.getId().equals(ignoredId)) {
-            throw new WebApplicationException(
-                    "Já existe um reembolso para esta terapia no mês informado.",
-                    Response.Status.CONFLICT
-            );
+        if (existing != null && !existing.getId().equals(ignoredId)) {
+            throw new WebApplicationException("Já existe um reembolso para esta terapia no mês informado.", Response.Status.CONFLICT);
         }
     }
 
-    private void ensureReimbursementIsDraft(
-            Reimbursement reimbursement
-    ) {
+    private void ensureReimbursementIsDraft(Reimbursement reimbursement) {
         long submittedCount = Solicitation.count(
-                "reimbursement.id = ?1 "
-                        + "and status <> ?2",
-                reimbursement.getId(),
-                SolicitationStatus.NOT_REQUESTED
-        );
+                "reimbursement.id = ?1 and status <> ?2", reimbursement.getId(), SolicitationStatus.NOT_REQUESTED);
 
         if (submittedCount > 0) {
-            throw new WebApplicationException(
-                    "Este reembolso já possui histórico de solicitação e não pode ser alterado ou excluído.",
-                    Response.Status.CONFLICT
-            );
+            throw new WebApplicationException("Este reembolso já possui histórico de solicitação e não pode ser alterado ou excluído.", Response.Status.CONFLICT);
         }
     }
 
-    private void validateReferenceMonth(
-            Therapy therapy,
-            LocalDate referenceMonth
+    private void validateReferenceMonth(Therapy therapy, LocalDate referenceMonth
     ) {
         YearMonth requested =
                 YearMonth.from(referenceMonth);

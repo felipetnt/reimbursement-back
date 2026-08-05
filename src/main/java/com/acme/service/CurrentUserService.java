@@ -66,14 +66,10 @@ public class CurrentUserService {
     }
 
     public void requireWritePermission() {
-        boolean allowed =
-                hasRole(UserRole.ADMIN)
-                        || hasRole(UserRole.USER);
+        boolean allowed = hasRole(UserRole.ADMIN) || hasRole(UserRole.USER);
 
         if (!allowed) {
-            throw new WebApplicationException(
-                    "Seu perfil possui acesso somente para visualização.",
-                    Response.Status.FORBIDDEN
+            throw new WebApplicationException("Seu perfil possui acesso somente para visualização.", Response.Status.FORBIDDEN
             );
         }
     }
