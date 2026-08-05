@@ -32,7 +32,7 @@ import java.util.UUID;
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(
         name = "Reimbursements",
-        description = "Reembolsos das terapias"
+        description = "Gerenciamento de reembolsos"
 )
 public class ReimbursementResource {
 
@@ -41,7 +41,11 @@ public class ReimbursementResource {
 
     @GET
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(summary = "Lista os reembolsos da família")
+    @Operation(
+            summary = "Lista reembolsos",
+            description = "O administrador lista todos. Usuários e visualizadores listam somente os reembolsos da própria família."
+    )
+    @APIResponse(responseCode = "200", description = "Reembolsos encontrados")
     public List<ReimbursementResponse> list() {
         return service.list();
     }
@@ -50,21 +54,19 @@ public class ReimbursementResource {
     @Path("/dependent/{dependentId}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Lista reembolsos por dependente")
-    public List<ReimbursementResponse> listByDependent(
-            @PathParam("dependentId") UUID dependentId
-    ) {
+    @APIResponse(responseCode = "200", description = "Reembolsos encontrados")
+    @APIResponse(responseCode = "404", description = "Dependente não encontrado")
+    public List<ReimbursementResponse> listByDependent(@PathParam("dependentId") UUID dependentId) {
         return service.listByDependent(dependentId);
     }
 
     @GET
     @Path("/{id}/details")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(
-            summary = "Obtém o reembolso e seu histórico de solicitações"
-    )
-    public ReimbursementDetailsResponse findDetails(
-            @PathParam("id") UUID id
-    ) {
+    @Operation(summary = "Obtém o reembolso e seu histórico de solicitações")
+    @APIResponse(responseCode = "200", description = "Detalhes encontrados")
+    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
+    public ReimbursementDetailsResponse findDetails(@PathParam("id") UUID id) {
         return service.findDetails(id);
     }
 
@@ -72,28 +74,21 @@ public class ReimbursementResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Busca um reembolso pelo ID")
-    public ReimbursementResponse findById(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "200", description = "Reembolso encontrado")
+    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
+    public ReimbursementResponse findById(@PathParam("id") UUID id) {
         return service.findById(id);
     }
 
     @POST
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Cria um novo reembolso")
-    @APIResponse(
-            responseCode = "201",
-            description = "Reembolso criado com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "Já existe reembolso no mês informado"
-    )
-    public Response create(
-            @Valid CreateReimbursementRequest request
-    ) {
-        ReimbursementResponse response =
-                service.create(request);
+    @APIResponse(responseCode = "201", description = "Reembolso criado com sucesso")
+    @APIResponse(responseCode = "400", description = "Mês de referência inválido")
+    @APIResponse(responseCode = "404", description = "Terapia não encontrada")
+    @APIResponse(responseCode = "409", description = "Já existe reembolso no mês informado")
+    public Response create(@Valid CreateReimbursementRequest request) {
+        ReimbursementResponse response = service.create(request);
 
         return Response.status(Response.Status.CREATED)
                 .entity(response)
@@ -104,6 +99,10 @@ public class ReimbursementResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Atualiza um reembolso ainda não enviado")
+    @APIResponse(responseCode = "200", description = "Reembolso atualizado com sucesso")
+    @APIResponse(responseCode = "400", description = "Mês de referência inválido")
+    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
+    @APIResponse(responseCode = "409", description = "Reembolso já enviado ou mês duplicado")
     public ReimbursementResponse update(
             @PathParam("id") UUID id,
             @Valid UpdateReimbursementRequest request
@@ -113,19 +112,12 @@ public class ReimbursementResource {
 
     @DELETE
     @Path("/{id}")
-    @RolesAllowed("ADMIN")
+    @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Remove um reembolso ainda não enviado")
-    @APIResponse(
-            responseCode = "204",
-            description = "Reembolso removido com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "Reembolso já possui histórico enviado"
-    )
-    public Response delete(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "204", description = "Reembolso removido com sucesso")
+    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
+    @APIResponse(responseCode = "409", description = "Reembolso já possui histórico enviado")
+    public Response delete(@PathParam("id") UUID id) {
         service.delete(id);
         return Response.noContent().build();
     }

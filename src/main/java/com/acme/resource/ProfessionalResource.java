@@ -31,7 +31,7 @@ import java.util.UUID;
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(
         name = "Professionals",
-        description = "Profissionais cadastrados pela família"
+        description = "Gerenciamento de profissionais"
 )
 public class ProfessionalResource {
 
@@ -40,7 +40,10 @@ public class ProfessionalResource {
 
     @GET
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(summary = "Lista os profissionais da família")
+    @Operation(
+            summary = "Lista profissionais",
+            description = "O administrador lista todos. Usuários e visualizadores listam somente os profissionais da própria família."
+    )
     public List<ProfessionalResponse> list() {
         return service.list();
     }
@@ -49,9 +52,9 @@ public class ProfessionalResource {
     @Path("/specialty/{specialtyId}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Lista profissionais por especialidade")
-    public List<ProfessionalResponse> listBySpecialty(
-            @PathParam("specialtyId") UUID specialtyId
-    ) {
+    @APIResponse(responseCode = "200", description = "Profissionais encontrados")
+    @APIResponse(responseCode = "404", description = "Especialidade não encontrada")
+    public List<ProfessionalResponse> listBySpecialty(@PathParam("specialtyId") UUID specialtyId) {
         return service.listBySpecialty(specialtyId);
     }
 
@@ -59,24 +62,24 @@ public class ProfessionalResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Busca um profissional pelo ID")
-    public ProfessionalResponse findById(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "200", description = "Profissional encontrado")
+    @APIResponse(responseCode = "404", description = "Profissional não encontrado")
+    public ProfessionalResponse findById(@PathParam("id") UUID id) {
         return service.findById(id);
     }
 
     @POST
     @RolesAllowed({"ADMIN", "USER"})
-    @Operation(summary = "Cria um novo profissional")
-    @APIResponse(
-            responseCode = "201",
-            description = "Profissional criado com sucesso"
+    @Operation(
+            summary = "Cria um profissional",
+            description = "O administrador cria em qualquer família. Um usuário cria somente na própria família."
     )
-    public Response create(
-            @Valid CreateProfessionalRequest request
-    ) {
-        ProfessionalResponse response =
-                service.create(request);
+    @APIResponse(responseCode = "201", description = "Profissional criado com sucesso")
+    @APIResponse(responseCode = "400", description = "Família e especialidade incompatíveis ou dados inválidos")
+    @APIResponse(responseCode = "403", description = "Família inválida ou usuário sem permissão")
+    @APIResponse(responseCode = "404", description = "Família ou especialidade não encontrada")
+    public Response create(@Valid CreateProfessionalRequest request) {
+        ProfessionalResponse response = service.create(request);
 
         return Response.status(Response.Status.CREATED)
                 .entity(response)
@@ -87,6 +90,9 @@ public class ProfessionalResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Atualiza um profissional")
+    @APIResponse(responseCode = "200", description = "Profissional atualizado com sucesso")
+    @APIResponse(responseCode = "400", description = "Profissional e especialidade pertencem a famílias diferentes")
+    @APIResponse(responseCode = "404", description = "Profissional ou especialidade não encontrada")
     public ProfessionalResponse update(
             @PathParam("id") UUID id,
             @Valid UpdateProfessionalRequest request
@@ -96,19 +102,12 @@ public class ProfessionalResource {
 
     @DELETE
     @Path("/{id}")
-    @RolesAllowed("ADMIN")
+    @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Remove um profissional")
-    @APIResponse(
-            responseCode = "204",
-            description = "Profissional removido com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "Profissional possui terapias vinculadas"
-    )
-    public Response delete(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "204", description = "Profissional removido com sucesso")
+    @APIResponse(responseCode = "404", description = "Profissional não encontrado")
+    @APIResponse(responseCode = "409", description = "Profissional possui terapias vinculadas")
+    public Response delete(@PathParam("id") UUID id) {
         service.delete(id);
         return Response.noContent().build();
     }

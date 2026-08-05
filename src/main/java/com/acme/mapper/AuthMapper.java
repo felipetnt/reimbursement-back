@@ -1,7 +1,7 @@
 package com.acme.mapper;
 
 import com.acme.domain.model.User;
-import com.acme.dto.response.AuthResponse;
+import com.acme.dto.request.auth.AuthResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 

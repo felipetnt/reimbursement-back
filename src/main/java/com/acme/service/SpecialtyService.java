@@ -1,5 +1,6 @@
 package com.acme.service;
 
+import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Family;
 import com.acme.domain.model.Professional;
 import com.acme.domain.model.Specialty;
@@ -29,72 +30,47 @@ public class SpecialtyService {
     CurrentUserService currentUserService;
 
     public List<SpecialtyResponse> list() {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return Specialty.<Specialty>list("order by name")
+                    .stream()
+                    .map(mapper::toResponse)
+                    .toList();
+        }
 
-        return Specialty.<Specialty>list(
-                        "family.id = ?1 order by name",
-                        familyId
-                )
+        UUID familyId = familyAccessService.getCurrentFamilyId();
+
+        return Specialty.<Specialty>list("family.id = ?1 order by name", familyId)
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
     public SpecialtyResponse findById(UUID id) {
-        return mapper.toResponse(
-                findScopedSpecialty(id)
-        );
+        return mapper.toResponse(findAccessibleSpecialty(id));
     }
 
     @Transactional
-    public SpecialtyResponse create(
-            CreateSpecialtyRequest request
-    ) {
+    public SpecialtyResponse create(CreateSpecialtyRequest request) {
         currentUserService.requireWritePermission();
 
-        familyAccessService
-                .ensureCanAccessFamily(
-                        request.familyId()
-                );
+        Family family = familyAccessService.getAccessibleFamily(request.familyId());
 
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        ensureNameAvailable(request.name(), family.getId(), null);
 
-        ensureNameAvailable(
-                request.name(),
-                familyId,
-                null
-        );
-
-        Family family =
-                familyAccessService.getCurrentFamily();
-
-        Specialty specialty = mapper.toEntity(
-                request,
-                family
-        );
-
+        Specialty specialty = mapper.toEntity(request, family);
         specialty.persist();
 
         return mapper.toResponse(specialty);
     }
 
     @Transactional
-    public SpecialtyResponse update(
-            UUID id,
-            UpdateSpecialtyRequest request
-    ) {
+    public SpecialtyResponse update(UUID id, UpdateSpecialtyRequest request) {
         currentUserService.requireWritePermission();
 
-        Specialty specialty =
-                findScopedSpecialty(id);
+        Specialty specialty = findAccessibleSpecialty(id);
+        UUID familyId = specialty.getFamily().getId();
 
-        ensureNameAvailable(
-                request.name(),
-                familyAccessService.getCurrentFamilyId(),
-                specialty.getId()
-        );
+        ensureNameAvailable(request.name(), familyId, specialty.getId());
 
         mapper.updateEntity(request, specialty);
 
@@ -103,17 +79,11 @@ public class SpecialtyService {
 
     @Transactional
     public void delete(UUID id) {
-        currentUserService.requireAdmin();
+        currentUserService.requireWritePermission();
 
-        Specialty specialty =
-                findScopedSpecialty(id);
+        Specialty specialty = findAccessibleSpecialty(id);
 
-        long professionalCount = Professional.count(
-                "specialty.id = ?1 "
-                        + "and family.id = ?2",
-                specialty.getId(),
-                familyAccessService.getCurrentFamilyId()
-        );
+        long professionalCount = Professional.count("specialty.id = ?1", specialty.getId());
 
         if (professionalCount > 0) {
             throw new WebApplicationException(
@@ -125,40 +95,31 @@ public class SpecialtyService {
         specialty.delete();
     }
 
-    private Specialty findScopedSpecialty(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Specialty findAccessibleSpecialty(UUID id) {
+        Specialty specialty;
 
-        Specialty specialty = Specialty.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            specialty = Specialty.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            specialty = Specialty.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (specialty == null) {
-            throw new WebApplicationException(
-                    "Especialidade não encontrada.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Especialidade não encontrada.", Response.Status.NOT_FOUND);
         }
 
         return specialty;
     }
 
-    private void ensureNameAvailable(
-            String name,
-            UUID familyId,
-            UUID ignoredId
-    ) {
+    private void ensureNameAvailable(String name, UUID familyId, UUID ignoredId) {
         Specialty existing = Specialty.find(
-                "lower(name) = lower(?1) "
-                        + "and family.id = ?2",
+                "lower(name) = lower(?1) and family.id = ?2",
                 name.trim(),
                 familyId
         ).firstResult();
 
-        if (existing != null
-                && !existing.getId().equals(ignoredId)) {
+        if (existing != null && !existing.getId().equals(ignoredId)) {
             throw new WebApplicationException(
                     "Já existe uma especialidade com este nome nesta família.",
                     Response.Status.CONFLICT

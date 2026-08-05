@@ -1,7 +1,7 @@
 package com.acme.resource;
 
 import com.acme.dto.request.auth.InitializeSystemRequest;
-import com.acme.dto.response.AuthResponse;
+import com.acme.dto.request.auth.AuthResponse;
 import com.acme.service.SetupService;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;

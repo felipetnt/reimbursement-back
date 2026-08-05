@@ -30,10 +30,7 @@ import java.util.UUID;
 @Authenticated
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@Tag(
-        name = "Dependents",
-        description = "Dependentes da família autenticada"
-)
+@Tag(name = "Dependents", description = "Gerenciamento de dependentes")
 public class DependentResource {
 
     @Inject
@@ -41,7 +38,11 @@ public class DependentResource {
 
     @GET
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(summary = "Lista dependentes da família autenticada")
+    @Operation(
+            summary = "Lista dependentes",
+            description = "O administrador lista todos os dependentes. Usuários e visualizadores listam somente os dependentes da própria família."
+    )
+    @APIResponse(responseCode = "200", description = "Dependentes encontrados")
     public List<DependentResponse> list() {
         return service.list();
     }
@@ -49,20 +50,10 @@ public class DependentResource {
     @GET
     @Path("/{id}/details")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(
-            summary = "Obtém os detalhes, terapias e reembolsos de um dependente"
-    )
-    @APIResponse(
-            responseCode = "200",
-            description = "Detalhes encontrados"
-    )
-    @APIResponse(
-            responseCode = "404",
-            description = "Dependente não encontrado"
-    )
-    public DependentDetailsResponse findDetails(
-            @PathParam("id") UUID id
-    ) {
+    @Operation(summary = "Obtém os detalhes, terapias e reembolsos de um dependente")
+    @APIResponse(responseCode = "200", description = "Detalhes encontrados")
+    @APIResponse(responseCode = "404", description = "Dependente não encontrado")
+    public DependentDetailsResponse findDetails(@PathParam("id") UUID id) {
         return service.findDetails(id);
     }
 
@@ -72,23 +63,21 @@ public class DependentResource {
     @Operation(summary = "Busca um dependente pelo ID")
     @APIResponse(responseCode = "200", description = "Dependente encontrado")
     @APIResponse(responseCode = "404", description = "Dependente não encontrado")
-    public DependentResponse findById(
-            @PathParam("id") UUID id
-    ) {
+    public DependentResponse findById(@PathParam("id") UUID id) {
         return service.findById(id);
     }
 
     @POST
     @RolesAllowed({"ADMIN", "USER"})
-    @Operation(summary = "Cria um novo dependente")
+    @Operation(
+            summary = "Cria um dependente",
+            description = "O administrador cria em qualquer família. Um usuário cria somente na própria família."
+    )
     @APIResponse(responseCode = "201", description = "Dependente criado com sucesso")
     @APIResponse(responseCode = "400", description = "Dados inválidos")
     @APIResponse(responseCode = "403", description = "Família inválida ou usuário sem permissão")
-    public Response create(
-            @Valid CreateDependentRequest request
-    ) {
-        DependentResponse response =
-                service.create(request);
+    public Response create(@Valid CreateDependentRequest request) {
+        DependentResponse response = service.create(request);
 
         return Response.status(Response.Status.CREATED)
                 .entity(response)
@@ -107,13 +96,12 @@ public class DependentResource {
 
     @DELETE
     @Path("/{id}")
-    @RolesAllowed("ADMIN")
+    @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Remove um dependente")
     @APIResponse(responseCode = "204", description = "Dependente removido com sucesso")
+    @APIResponse(responseCode = "404", description = "Dependente não encontrado")
     @APIResponse(responseCode = "409", description = "Dependente possui histórico vinculado")
-    public Response delete(
-            @PathParam("id") UUID id
-    ) {
+    public Response delete(@PathParam("id") UUID id) {
         service.delete(id);
         return Response.noContent().build();
     }

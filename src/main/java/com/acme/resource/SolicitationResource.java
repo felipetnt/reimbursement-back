@@ -28,10 +28,7 @@ import java.util.UUID;
 @Authenticated
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@Tag(
-        name = "Solicitations",
-        description = "Tentativas de solicitação dos reembolsos"
-)
+@Tag(name = "Solicitations", description = "Gerenciamento de tentativas de solicitação")
 public class SolicitationResource {
 
     @Inject
@@ -39,7 +36,8 @@ public class SolicitationResource {
 
     @GET
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(summary = "Lista as solicitações da família")
+    @Operation(summary = "Lista solicitações", description = "O administrador lista todas. Usuários e visualizadores listam somente as solicitações da própria família.")
+    @APIResponse(responseCode = "200", description = "Solicitações encontradas")
     public List<SolicitationResponse> list() {
         return service.list();
     }
@@ -48,43 +46,32 @@ public class SolicitationResource {
     @Path("/reimbursement/{reimbursementId}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Lista solicitações por reembolso")
+    @APIResponse(responseCode = "200", description = "Solicitações encontradas")
+    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
     public List<SolicitationResponse> listByReimbursement(
-            @PathParam("reimbursementId")
-            UUID reimbursementId
+            @PathParam("reimbursementId") UUID reimbursementId
     ) {
-        return service.listByReimbursement(
-                reimbursementId
-        );
+        return service.listByReimbursement(reimbursementId);
     }
 
     @GET
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Busca uma solicitação pelo ID")
-    public SolicitationResponse findById(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "200", description = "Solicitação encontrada")
+    @APIResponse(responseCode = "404", description = "Solicitação não encontrada")
+    public SolicitationResponse findById(@PathParam("id") UUID id) {
         return service.findById(id);
     }
 
     @POST
     @RolesAllowed({"ADMIN", "USER"})
-    @Operation(
-            summary = "Cria uma nova tentativa após uma solicitação negada"
-    )
-    @APIResponse(
-            responseCode = "201",
-            description = "Nova tentativa criada com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "A última solicitação ainda não foi negada"
-    )
-    public Response create(
-            @Valid CreateSolicitationRequest request
-    ) {
-        SolicitationResponse response =
-                service.create(request);
+    @Operation(summary = "Cria uma nova tentativa após uma solicitação negada")
+    @APIResponse(responseCode = "201", description = "Nova tentativa criada com sucesso")
+    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
+    @APIResponse(responseCode = "409", description = "A última solicitação ainda não foi negada")
+    public Response create(@Valid CreateSolicitationRequest request) {
+        SolicitationResponse response = service.create(request);
 
         return Response.status(Response.Status.CREATED)
                 .entity(response)
@@ -95,14 +82,10 @@ public class SolicitationResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Atualiza o status de uma solicitação")
-    @APIResponse(
-            responseCode = "200",
-            description = "Solicitação atualizada com sucesso"
-    )
-    @APIResponse(
-            responseCode = "400",
-            description = "Transição de status inválida"
-    )
+    @APIResponse(responseCode = "200", description = "Solicitação atualizada com sucesso")
+    @APIResponse(responseCode = "400", description = "Transição de status inválida ou dados obrigatórios ausentes")
+    @APIResponse(responseCode = "404", description = "Solicitação não encontrada")
+    @APIResponse(responseCode = "409", description = "Protocolo já utilizado")
     public SolicitationResponse update(
             @PathParam("id") UUID id,
             @Valid UpdateSolicitationRequest request

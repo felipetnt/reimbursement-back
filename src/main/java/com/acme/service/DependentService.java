@@ -1,5 +1,6 @@
 package com.acme.service;
 
+import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Dependent;
 import com.acme.domain.model.Family;
 import com.acme.domain.model.Reimbursement;
@@ -35,6 +36,13 @@ public class DependentService {
     CurrentUserService currentUserService;
 
     public List<DependentResponse> list() {
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return Dependent.<Dependent>list("order by name")
+                    .stream()
+                    .map(mapper::toResponse)
+                    .toList();
+        }
+
         UUID familyId = familyAccessService.getCurrentFamilyId();
 
         return Dependent.<Dependent>list("family.id = ?1 order by name", familyId)
@@ -44,33 +52,24 @@ public class DependentService {
     }
 
     public DependentResponse findById(UUID id) {
-        return mapper.toResponse(findScopedDependent(id));
+        return mapper.toResponse(findAccessibleDependent(id));
     }
 
     public DependentDetailsResponse findDetails(UUID id) {
-        Dependent dependent = findScopedDependent(id);
-
-        UUID familyId = familyAccessService.getCurrentFamilyId();
+        Dependent dependent = findAccessibleDependent(id);
+        UUID familyId = dependent.getFamily().getId();
 
         List<Therapy> therapies = Therapy.list(
-                "dependent.id = ?1 "
-                        + "and dependent.family.id = ?2 "
-                        + "order by active desc, "
-                        + "startDate desc",
+                "dependent.id = ?1 and dependent.family.id = ?2 order by active desc, startDate desc",
                 dependent.getId(),
                 familyId
         );
 
-        List<Reimbursement> reimbursements =
-                Reimbursement.list(
-                        "therapy.dependent.id = ?1 "
-                                + "and therapy.dependent."
-                                + "family.id = ?2 "
-                                + "order by "
-                                + "referenceMonth desc",
-                        dependent.getId(),
-                        familyId
-                );
+        List<Reimbursement> reimbursements = Reimbursement.list(
+                "therapy.dependent.id = ?1 and therapy.dependent.family.id = ?2 order by referenceMonth desc",
+                dependent.getId(),
+                familyId
+        );
 
         return detailsMapper.toResponse(
                 dependent,
@@ -83,30 +82,19 @@ public class DependentService {
     public DependentResponse create(CreateDependentRequest request) {
         currentUserService.requireWritePermission();
 
-        familyAccessService.ensureCanAccessFamily(request.familyId());
+        Family family = familyAccessService.getAccessibleFamily(request.familyId());
 
-        Family family =
-                familyAccessService.getCurrentFamily();
-
-        Dependent dependent = mapper.toEntity(
-                request,
-                family
-        );
-
+        Dependent dependent = mapper.toEntity(request, family);
         dependent.persist();
 
         return mapper.toResponse(dependent);
     }
 
     @Transactional
-    public DependentResponse update(
-            UUID id,
-            UpdateDependentRequest request
-    ) {
+    public DependentResponse update(UUID id, UpdateDependentRequest request) {
         currentUserService.requireWritePermission();
 
-        Dependent dependent =
-                findScopedDependent(id);
+        Dependent dependent = findAccessibleDependent(id);
 
         mapper.updateEntity(request, dependent);
 
@@ -115,15 +103,11 @@ public class DependentService {
 
     @Transactional
     public void delete(UUID id) {
-        currentUserService.requireAdmin();
+        currentUserService.requireWritePermission();
 
-        Dependent dependent =
-                findScopedDependent(id);
+        Dependent dependent = findAccessibleDependent(id);
 
-        long therapyCount = Therapy.count(
-                "dependent.id = ?1",
-                dependent.getId()
-        );
+        long therapyCount = Therapy.count("dependent.id = ?1", dependent.getId());
 
         if (therapyCount > 0) {
             throw new WebApplicationException(
@@ -135,21 +119,18 @@ public class DependentService {
         dependent.delete();
     }
 
-    private Dependent findScopedDependent(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Dependent findAccessibleDependent(UUID id) {
+        Dependent dependent;
 
-        Dependent dependent = Dependent.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            dependent = Dependent.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            dependent = Dependent.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (dependent == null) {
-            throw new WebApplicationException(
-                    "Dependente não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Dependente não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return dependent;

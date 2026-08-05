@@ -29,6 +29,23 @@ public class Dependent extends BaseEntity {
     @OneToMany(mappedBy = "dependent")
     private List<Therapy> therapies = new ArrayList<>();
 
+    @OneToMany(mappedBy = "dependent")
+    private List<Document> documents = new ArrayList<>();
+
+    public List<Document> getDocuments() {
+        return documents;
+    }
+
+    public void addDocument(Document document) {
+        documents.add(document);
+        document.setDependent(this);
+    }
+
+    public void removeDocument(Document document) {
+        documents.remove(document);
+        document.setDependent(null);
+    }
+
     public String getName() {
         return name;
     }

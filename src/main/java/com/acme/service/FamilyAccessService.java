@@ -16,13 +16,7 @@ public class FamilyAccessService {
     CurrentUserService currentUserService;
 
     public UUID getCurrentFamilyId() {
-        UUID familyId = currentUserService.getFamilyId();
-
-        if (familyId == null) {
-            throw new WebApplicationException("O administrador deve informar a família que deseja acessar.", Response.Status.BAD_REQUEST);
-        }
-
-        return familyId;
+        return currentUserService.getFamilyId();
     }
 
     public Family getCurrentFamily() {
@@ -31,17 +25,16 @@ public class FamilyAccessService {
         Family family = Family.findById(familyId);
 
         if (family == null) {
-            throw new WebApplicationException("A família vinculada ao usuário autenticado não foi encontrada.", Response.Status.UNAUTHORIZED);
+            throw new WebApplicationException(
+                    "A família vinculada ao usuário autenticado não foi encontrada.",
+                    Response.Status.UNAUTHORIZED
+            );
         }
 
         return family;
     }
 
     public Family getAccessibleFamily(UUID requestedFamilyId) {
-        if (requestedFamilyId == null) {
-            throw new WebApplicationException("O ID da família é obrigatório.", Response.Status.BAD_REQUEST);
-        }
-
         ensureCanAccessFamily(requestedFamilyId);
 
         Family family = Family.findById(requestedFamilyId);
@@ -54,6 +47,7 @@ public class FamilyAccessService {
     }
 
     public void ensureCanAccessFamily(UUID requestedFamilyId) {
+
         if (requestedFamilyId == null) {
             throw new WebApplicationException("O ID da família é obrigatório.", Response.Status.BAD_REQUEST);
         }

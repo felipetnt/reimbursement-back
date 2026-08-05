@@ -2,7 +2,7 @@ package com.acme.service;
 
 import com.acme.domain.model.User;
 import com.acme.dto.request.auth.LoginRequest;
-import com.acme.dto.response.AuthResponse;
+import com.acme.dto.request.auth.AuthResponse;
 import com.acme.mapper.AuthMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

@@ -29,10 +29,7 @@ import java.util.UUID;
 @Authenticated
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@Tag(
-        name = "Therapies",
-        description = "Terapias dos dependentes"
-)
+@Tag(name = "Therapies", description = "Gerenciamento de terapias")
 public class TherapyResource {
 
     @Inject
@@ -40,7 +37,8 @@ public class TherapyResource {
 
     @GET
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
-    @Operation(summary = "Lista as terapias da família")
+    @Operation(summary = "Lista terapias", description = "O administrador lista todas. Usuários e visualizadores listam somente as terapias da própria família.")
+    @APIResponse(responseCode = "200", description = "Terapias encontradas")
     public List<TherapyResponse> list() {
         return service.list();
     }
@@ -49,9 +47,9 @@ public class TherapyResource {
     @Path("/dependent/{dependentId}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Lista terapias por dependente")
-    public List<TherapyResponse> listByDependent(
-            @PathParam("dependentId") UUID dependentId
-    ) {
+    @APIResponse(responseCode = "200", description = "Terapias encontradas")
+    @APIResponse(responseCode = "404", description = "Dependente não encontrado")
+    public List<TherapyResponse> listByDependent(@PathParam("dependentId") UUID dependentId) {
         return service.listByDependent(dependentId);
     }
 
@@ -59,28 +57,21 @@ public class TherapyResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(summary = "Busca uma terapia pelo ID")
-    public TherapyResponse findById(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "200", description = "Terapia encontrada")
+    @APIResponse(responseCode = "404", description = "Terapia não encontrada")
+    public TherapyResponse findById(@PathParam("id") UUID id) {
         return service.findById(id);
     }
 
     @POST
     @RolesAllowed({"ADMIN", "USER"})
-    @Operation(summary = "Cria uma nova terapia")
-    @APIResponse(
-            responseCode = "201",
-            description = "Terapia criada com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "Já existe uma terapia ativa equivalente"
-    )
-    public Response create(
-            @Valid CreateTherapyRequest request
-    ) {
-        TherapyResponse response =
-                service.create(request);
+    @Operation(summary = "Cria uma terapia", description = "O dependente e o profissional precisam pertencer à mesma família.")
+    @APIResponse(responseCode = "201", description = "Terapia criada com sucesso")
+    @APIResponse(responseCode = "400", description = "Datas inválidas ou entidades de famílias diferentes")
+    @APIResponse(responseCode = "404", description = "Dependente ou profissional não encontrado")
+    @APIResponse(responseCode = "409", description = "Já existe uma terapia ativa equivalente")
+    public Response create(@Valid CreateTherapyRequest request) {
+        TherapyResponse response = service.create(request);
 
         return Response.status(Response.Status.CREATED)
                 .entity(response)
@@ -91,28 +82,21 @@ public class TherapyResource {
     @Path("/{id}")
     @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Atualiza uma terapia")
-    public TherapyResponse update(
-            @PathParam("id") UUID id,
-            @Valid UpdateTherapyRequest request
-    ) {
+    @APIResponse(responseCode = "200", description = "Terapia atualizada com sucesso")
+    @APIResponse(responseCode = "400", description = "Datas inválidas")
+    @APIResponse(responseCode = "404", description = "Terapia não encontrada")
+    public TherapyResponse update(@PathParam("id") UUID id, @Valid UpdateTherapyRequest request) {
         return service.update(id, request);
     }
 
     @DELETE
     @Path("/{id}")
-    @RolesAllowed("ADMIN")
+    @RolesAllowed({"ADMIN", "USER"})
     @Operation(summary = "Remove uma terapia")
-    @APIResponse(
-            responseCode = "204",
-            description = "Terapia removida com sucesso"
-    )
-    @APIResponse(
-            responseCode = "409",
-            description = "Terapia possui reembolsos vinculados"
-    )
-    public Response delete(
-            @PathParam("id") UUID id
-    ) {
+    @APIResponse(responseCode = "204", description = "Terapia removida com sucesso")
+    @APIResponse(responseCode = "404", description = "Terapia não encontrada")
+    @APIResponse(responseCode = "409", description = "Terapia possui reembolsos vinculados")
+    public Response delete(@PathParam("id") UUID id) {
         service.delete(id);
         return Response.noContent().build();
     }

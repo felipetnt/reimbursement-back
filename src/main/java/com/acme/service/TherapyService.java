@@ -1,5 +1,6 @@
 package com.acme.service;
 
+import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Dependent;
 import com.acme.domain.model.Professional;
 import com.acme.domain.model.Reimbursement;
@@ -31,13 +32,17 @@ public class TherapyService {
     CurrentUserService currentUserService;
 
     public List<TherapyResponse> list() {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return Therapy.<Therapy>list("order by active desc, startDate desc")
+                    .stream()
+                    .map(mapper::toResponse)
+                    .toList();
+        }
+
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
         return Therapy.<Therapy>list(
-                        "dependent.family.id = ?1 "
-                                + "order by active desc, "
-                                + "startDate desc",
+                        "dependent.family.id = ?1 order by active desc, startDate desc",
                         familyId
                 )
                 .stream()
@@ -46,24 +51,16 @@ public class TherapyService {
     }
 
     public TherapyResponse findById(UUID id) {
-        return mapper.toResponse(
-                findScopedTherapy(id)
-        );
+        return mapper.toResponse(findAccessibleTherapy(id));
     }
 
-    public List<TherapyResponse> listByDependent(
-            UUID dependentId
-    ) {
-        Dependent dependent =
-                findScopedDependent(dependentId);
+    public List<TherapyResponse> listByDependent(UUID dependentId) {
+        Dependent dependent = findAccessibleDependent(dependentId);
 
         return Therapy.<Therapy>list(
-                        "dependent.id = ?1 "
-                                + "and dependent.family.id = ?2 "
-                                + "order by active desc, "
-                                + "startDate desc",
+                        "dependent.id = ?1 and dependent.family.id = ?2 order by active desc, startDate desc",
                         dependent.getId(),
-                        familyAccessService.getCurrentFamilyId()
+                        dependent.getFamily().getId()
                 )
                 .stream()
                 .map(mapper::toResponse)
@@ -71,25 +68,18 @@ public class TherapyService {
     }
 
     @Transactional
-    public TherapyResponse create(
-            CreateTherapyRequest request
-    ) {
+    public TherapyResponse create(CreateTherapyRequest request) {
         currentUserService.requireWritePermission();
 
-        Dependent dependent =
-                findScopedDependent(
-                        request.dependentId()
-                );
+        Dependent dependent = findAccessibleDependent(request.dependentId());
+        Professional professional = findAccessibleProfessional(request.professionalId());
 
-        Professional professional =
-                findScopedProfessional(
-                        request.professionalId()
-                );
-
-        validateDates(
-                request.startDate(),
-                request.endDate()
+        ensureSameFamily(
+                dependent.getFamily().getId(),
+                professional.getFamily().getId()
         );
+
+        validateDates(request.startDate(), request.endDate());
 
         ensureNoActiveDuplicate(
                 dependent.getId(),
@@ -108,18 +98,12 @@ public class TherapyService {
     }
 
     @Transactional
-    public TherapyResponse update(
-            UUID id,
-            UpdateTherapyRequest request
-    ) {
+    public TherapyResponse update(UUID id, UpdateTherapyRequest request) {
         currentUserService.requireWritePermission();
 
-        Therapy therapy = findScopedTherapy(id);
+        Therapy therapy = findAccessibleTherapy(id);
 
-        validateDates(
-                request.startDate(),
-                request.endDate()
-        );
+        validateDates(request.startDate(), request.endDate());
 
         mapper.updateEntity(request, therapy);
 
@@ -128,15 +112,11 @@ public class TherapyService {
 
     @Transactional
     public void delete(UUID id) {
-        currentUserService.requireAdmin();
+        currentUserService.requireWritePermission();
 
-        Therapy therapy = findScopedTherapy(id);
+        Therapy therapy = findAccessibleTherapy(id);
 
-        long reimbursementCount =
-                Reimbursement.count(
-                        "therapy.id = ?1",
-                        therapy.getId()
-                );
+        long reimbursementCount = Reimbursement.count("therapy.id = ?1", therapy.getId());
 
         if (reimbursementCount > 0) {
             throw new WebApplicationException(
@@ -148,54 +128,54 @@ public class TherapyService {
         therapy.delete();
     }
 
-    private Therapy findScopedTherapy(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Therapy findAccessibleTherapy(UUID id) {
+        Therapy therapy;
 
-        Therapy therapy = Therapy.find(
-                "id = ?1 "
-                        + "and dependent.family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            therapy = Therapy.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+
+            therapy = Therapy.find(
+                    "id = ?1 and dependent.family.id = ?2",
+                    id,
+                    familyId
+            ).firstResult();
+        }
 
         if (therapy == null) {
-            throw new WebApplicationException(
-                    "Terapia não encontrada.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Terapia não encontrada.", Response.Status.NOT_FOUND);
         }
 
         return therapy;
     }
 
-    private Dependent findScopedDependent(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Dependent findAccessibleDependent(UUID id) {
+        Dependent dependent;
 
-        Dependent dependent = Dependent.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            dependent = Dependent.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            dependent = Dependent.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (dependent == null) {
-            throw new WebApplicationException(
-                    "Dependente não encontrado.",
-                    Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Dependente não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return dependent;
     }
 
-    private Professional findScopedProfessional(
-            UUID id
-    ) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Professional findAccessibleProfessional(UUID id) {
+        Professional professional;
 
-        Professional professional = Professional.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            professional = Professional.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            professional = Professional.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (professional == null) {
             throw new WebApplicationException("Profissional não encontrado.", Response.Status.NOT_FOUND);
@@ -204,20 +184,35 @@ public class TherapyService {
         return professional;
     }
 
-    private void validateDates(LocalDate startDate, LocalDate endDate
-    ) {
+    private void ensureSameFamily(UUID dependentFamilyId, UUID professionalFamilyId) {
+        if (!dependentFamilyId.equals(professionalFamilyId)) {
+            throw new WebApplicationException(
+                    "O dependente e o profissional devem pertencer à mesma família.",
+                    Response.Status.BAD_REQUEST
+            );
+        }
+    }
+
+    private void validateDates(LocalDate startDate, LocalDate endDate) {
         if (endDate != null && endDate.isBefore(startDate)) {
-            throw new WebApplicationException("A data final não pode ser anterior à data inicial.", Response.Status.BAD_REQUEST);
+            throw new WebApplicationException(
+                    "A data final não pode ser anterior à data inicial.",
+                    Response.Status.BAD_REQUEST
+            );
         }
     }
 
     private void ensureNoActiveDuplicate(UUID dependentId, UUID professionalId) {
         long count = Therapy.count(
-                "dependent.id = ?1 and professional.id = ?2 and active = true", dependentId, professionalId
+                "dependent.id = ?1 and professional.id = ?2 and active = true",
+                dependentId,
+                professionalId
         );
 
         if (count > 0) {
-            throw new WebApplicationException("Já existe uma terapia ativa entre este dependente e este profissional.", Response.Status.CONFLICT
+            throw new WebApplicationException(
+                    "Já existe uma terapia ativa entre este dependente e este profissional.",
+                    Response.Status.CONFLICT
             );
         }
     }

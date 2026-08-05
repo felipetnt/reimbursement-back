@@ -63,6 +63,9 @@ public class Reimbursement extends BaseEntity {
     @OrderBy("attemptNumber ASC")
     private List<Solicitation> solicitations = new ArrayList<>();
 
+    @OneToMany(mappedBy = "reimbursement")
+    private List<Document> documents = new ArrayList<>();
+
     @PrePersist
     @PreUpdate
     public void recalculateTotalAmount() {
@@ -133,5 +136,19 @@ public class Reimbursement extends BaseEntity {
     public void removeSolicitation(Solicitation solicitation) {
         solicitations.remove(solicitation);
         solicitation.setReimbursement(null);
+    }
+
+    public List<Document> getDocuments() {
+        return documents;
+    }
+
+    public void addDocument(Document document) {
+        documents.add(document);
+        document.setReimbursement(this);
+    }
+
+    public void removeDocument(Document document) {
+        documents.remove(document);
+        document.setReimbursement(null);
     }
 }

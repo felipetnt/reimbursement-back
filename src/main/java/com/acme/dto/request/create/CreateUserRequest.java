@@ -24,6 +24,5 @@ public record CreateUserRequest(
         @NotNull(message = "Perfil de acesso é obrigatório")
         UserRole role,
 
-        @NotNull(message = "Família é obrigatória")
         UUID familyId
 ) {}

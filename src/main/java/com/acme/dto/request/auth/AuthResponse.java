@@ -1,4 +1,6 @@
-package com.acme.dto.response;
+package com.acme.dto.request.auth;
+
+import com.acme.dto.response.UserResponse;
 
 public record AuthResponse(
         String accessToken,

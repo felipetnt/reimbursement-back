@@ -1,10 +1,9 @@
 package com.acme.service;
 
 import com.acme.domain.enums.UserRole;
-import com.acme.domain.model.Family;
 import com.acme.domain.model.User;
 import com.acme.dto.request.auth.InitializeSystemRequest;
-import com.acme.dto.response.AuthResponse;
+import com.acme.dto.request.auth.AuthResponse;
 import com.acme.mapper.AuthMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,14 +26,9 @@ public class SetupService {
     AuthMapper authMapper;
 
     @Transactional
-    public AuthResponse initialize(
-            InitializeSystemRequest request
-    ) {
-        ensureSystemIsEmpty();
+    public AuthResponse initialize(InitializeSystemRequest request) {
 
-        Family family = new Family();
-        family.setName(request.familyName().trim());
-        family.persist();
+        ensureAdminDoesNotExist();
 
         User admin = new User();
         admin.setName(request.adminName().trim());
@@ -43,7 +37,9 @@ public class SetupService {
                 passwordService.hash(request.adminPassword())
         );
         admin.setRole(UserRole.ADMIN);
-        admin.setFamily(family);
+
+        admin.setFamily(null);
+
         admin.persist();
 
         String accessToken = jwtService.generate(admin);
@@ -55,10 +51,16 @@ public class SetupService {
         );
     }
 
-    private void ensureSystemIsEmpty() {
-        if (Family.count() > 0 || User.count() > 0) {
+    private void ensureAdminDoesNotExist() {
+
+        long adminCount = User.count(
+                "role = ?1",
+                UserRole.ADMIN
+        );
+
+        if (adminCount > 0) {
             throw new WebApplicationException(
-                    "O sistema já foi inicializado.",
+                    "O administrador inicial já foi criado.",
                     Response.Status.CONFLICT
             );
         }

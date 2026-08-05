@@ -1,5 +1,6 @@
 package com.acme.service;
 
+import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Family;
 import com.acme.domain.model.Professional;
 import com.acme.domain.model.Specialty;
@@ -30,8 +31,14 @@ public class ProfessionalService {
     CurrentUserService currentUserService;
 
     public List<ProfessionalResponse> list() {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return Professional.<Professional>list("order by name")
+                    .stream()
+                    .map(mapper::toResponse)
+                    .toList();
+        }
+
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
         return Professional.<Professional>list("family.id = ?1 order by name", familyId)
                 .stream()
@@ -40,91 +47,78 @@ public class ProfessionalService {
     }
 
     public ProfessionalResponse findById(UUID id) {
-        return mapper.toResponse(findScopedProfessional(id));
+        return mapper.toResponse(findAccessibleProfessional(id));
     }
 
     public List<ProfessionalResponse> listBySpecialty(UUID specialtyId) {
-        Specialty specialty = findScopedSpecialty(specialtyId);
+        Specialty specialty = findAccessibleSpecialty(specialtyId);
 
         return Professional.<Professional>list(
-                "specialty.id = ?1 and family.id = ?2 order by name", specialty.getId(), familyAccessService.getCurrentFamilyId())
+                        "specialty.id = ?1 and family.id = ?2 order by name",
+                        specialty.getId(),
+                        specialty.getFamily().getId()
+                )
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
     @Transactional
-    public ProfessionalResponse create(
-            CreateProfessionalRequest request
-    ) {
+    public ProfessionalResponse create(CreateProfessionalRequest request) {
         currentUserService.requireWritePermission();
 
-        familyAccessService
-                .ensureCanAccessFamily(request.familyId());
+        Family family = familyAccessService.getAccessibleFamily(request.familyId());
+        Specialty specialty = findAccessibleSpecialty(request.specialtyId());
 
-        Family family = familyAccessService.getCurrentFamily();
-
-        Specialty specialty = findScopedSpecialty(request.specialtyId());
+        ensureSameFamily(family.getId(), specialty.getFamily().getId());
 
         Professional professional = mapper.toEntity(request, family, specialty);
-
         professional.persist();
 
         return mapper.toResponse(professional);
     }
 
     @Transactional
-    public ProfessionalResponse update(
-            UUID id,
-            UpdateProfessionalRequest request
-    ) {
+    public ProfessionalResponse update(UUID id, UpdateProfessionalRequest request) {
         currentUserService.requireWritePermission();
 
-        Professional professional =
-                findScopedProfessional(id);
+        Professional professional = findAccessibleProfessional(id);
+        Specialty specialty = findAccessibleSpecialty(request.specialtyId());
 
-        Specialty specialty =
-                findScopedSpecialty(
-                        request.specialtyId()
-                );
+        ensureSameFamily(professional.getFamily().getId(), specialty.getFamily().getId());
 
-        mapper.updateEntity(
-                request,
-                professional,
-                specialty
-        );
+        mapper.updateEntity(request, professional, specialty);
 
         return mapper.toResponse(professional);
     }
 
     @Transactional
     public void delete(UUID id) {
-        currentUserService.requireAdmin();
+        currentUserService.requireWritePermission();
 
-        Professional professional =
-                findScopedProfessional(id);
+        Professional professional = findAccessibleProfessional(id);
 
         long therapyCount = Therapy.count("professional.id = ?1", professional.getId());
 
         if (therapyCount > 0) {
-            throw new WebApplicationException("Não é possível excluir um profissional que possui terapias vinculadas.", Response.Status.CONFLICT
+            throw new WebApplicationException(
+                    "Não é possível excluir um profissional que possui terapias vinculadas.",
+                    Response.Status.CONFLICT
             );
         }
 
         professional.delete();
     }
 
-    private Professional findScopedProfessional(
-            UUID id
-    ) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Professional findAccessibleProfessional(UUID id) {
+        Professional professional;
 
-        Professional professional = Professional.find(
-                "id = ?1 and family.id = ?2",
-                id,
-                familyId
-        ).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            professional = Professional.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            professional = Professional.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (professional == null) {
             throw new WebApplicationException("Profissional não encontrado.", Response.Status.NOT_FOUND);
@@ -133,16 +127,29 @@ public class ProfessionalService {
         return professional;
     }
 
-    private Specialty findScopedSpecialty(UUID id) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Specialty findAccessibleSpecialty(UUID id) {
+        Specialty specialty;
 
-        Specialty specialty = Specialty.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            specialty = Specialty.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            specialty = Specialty.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (specialty == null) {
             throw new WebApplicationException("Especialidade não encontrada.", Response.Status.NOT_FOUND);
         }
 
         return specialty;
+    }
+
+    private void ensureSameFamily(UUID professionalFamilyId, UUID specialtyFamilyId) {
+        if (!professionalFamilyId.equals(specialtyFamilyId)) {
+            throw new WebApplicationException(
+                    "O profissional e a especialidade devem pertencer à mesma família.",
+                    Response.Status.BAD_REQUEST
+            );
+        }
     }
 }

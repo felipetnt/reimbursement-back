@@ -1,6 +1,7 @@
 package com.acme.service;
 
 import com.acme.domain.enums.SolicitationStatus;
+import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Dependent;
 import com.acme.domain.model.Reimbursement;
 import com.acme.domain.model.Solicitation;
@@ -38,12 +39,17 @@ public class ReimbursementService {
     CurrentUserService currentUserService;
 
     public List<ReimbursementResponse> list() {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            return Reimbursement.<Reimbursement>list("order by referenceMonth desc")
+                    .stream()
+                    .map(mapper::toResponse)
+                    .toList();
+        }
+
+        UUID familyId = familyAccessService.getCurrentFamilyId();
 
         return Reimbursement.<Reimbursement>list(
-                        "therapy.dependent.family.id = ?1 "
-                                + "order by referenceMonth desc",
+                        "therapy.dependent.family.id = ?1 order by referenceMonth desc",
                         familyId
                 )
                 .stream()
@@ -52,56 +58,44 @@ public class ReimbursementService {
     }
 
     public ReimbursementResponse findById(UUID id) {
-        return mapper.toResponse(
-                findScopedReimbursement(id)
+        return mapper.toResponse(findAccessibleReimbursement(id));
+    }
+
+    public ReimbursementDetailsResponse findDetails(UUID id) {
+        Reimbursement reimbursement = findAccessibleReimbursement(id);
+
+        List<Solicitation> solicitations = Solicitation.list(
+                "reimbursement.id = ?1 order by attemptNumber asc",
+                reimbursement.getId()
+        );
+
+        return detailsMapper.toResponse(
+                reimbursement,
+                solicitations
         );
     }
 
-    public ReimbursementDetailsResponse findDetails(
-            UUID id
-    ) {
-        Reimbursement reimbursement =
-                findScopedReimbursement(id);
-
-        List<Solicitation> solicitations =
-                Solicitation.list(
-                        "reimbursement.id = ?1 "
-                                + "order by "
-                                + "attemptNumber asc",
-                        reimbursement.getId()
-                );
-
-        return detailsMapper.toResponse(reimbursement, solicitations);
-    }
-
     public List<ReimbursementResponse> listByDependent(UUID dependentId) {
-        Dependent dependent = findScopedDependent(dependentId);
+        Dependent dependent = findAccessibleDependent(dependentId);
 
         return Reimbursement.<Reimbursement>list(
-                "therapy.dependent.id = ?1 and therapy.dependent.family.id = ?2 order by referenceMonth desc", dependent.getId(), familyAccessService.getCurrentFamilyId())
+                        "therapy.dependent.id = ?1 and therapy.dependent.family.id = ?2 order by referenceMonth desc",
+                        dependent.getId(),
+                        dependent.getFamily().getId()
+                )
                 .stream()
                 .map(mapper::toResponse)
                 .toList();
     }
 
     @Transactional
-    public ReimbursementResponse create(
-            CreateReimbursementRequest request
-    ) {
+    public ReimbursementResponse create(CreateReimbursementRequest request) {
         currentUserService.requireWritePermission();
 
-        Therapy therapy =
-                findScopedTherapy(request.therapyId());
+        Therapy therapy = findAccessibleTherapy(request.therapyId());
+        LocalDate referenceMonth = normalizeMonth(request.referenceMonth());
 
-        LocalDate referenceMonth =
-                normalizeMonth(
-                        request.referenceMonth()
-                );
-
-        validateReferenceMonth(
-                therapy,
-                referenceMonth
-        );
+        validateReferenceMonth(therapy, referenceMonth);
 
         ensureMonthAvailable(
                 therapy.getId(),
@@ -109,56 +103,38 @@ public class ReimbursementService {
                 null
         );
 
-        Reimbursement reimbursement =
-                mapper.toEntity(request, therapy);
-
-        reimbursement.setReferenceMonth(
-                referenceMonth
-        );
-
+        Reimbursement reimbursement = mapper.toEntity(request, therapy);
+        reimbursement.setReferenceMonth(referenceMonth);
         reimbursement.persist();
 
-        Solicitation initialSolicitation =
-                new Solicitation();
-
-        initialSolicitation.setReimbursement(
-                reimbursement
-        );
+        Solicitation initialSolicitation = new Solicitation();
+        initialSolicitation.setReimbursement(reimbursement);
         initialSolicitation.setAttemptNumber(1);
-        initialSolicitation.setStatus(
-                SolicitationStatus.NOT_REQUESTED
-        );
+        initialSolicitation.setStatus(SolicitationStatus.NOT_REQUESTED);
         initialSolicitation.persist();
 
         return mapper.toResponse(reimbursement);
     }
 
     @Transactional
-    public ReimbursementResponse update(
-            UUID id,
-            UpdateReimbursementRequest request
-    ) {
+    public ReimbursementResponse update(UUID id, UpdateReimbursementRequest request) {
         currentUserService.requireWritePermission();
 
-        Reimbursement reimbursement =
-                findScopedReimbursement(id);
+        Reimbursement reimbursement = findAccessibleReimbursement(id);
 
         ensureReimbursementIsDraft(reimbursement);
 
-        LocalDate referenceMonth =
-                normalizeMonth(request.referenceMonth());
+        LocalDate referenceMonth = normalizeMonth(request.referenceMonth());
 
-        validateReferenceMonth(
-                reimbursement.getTherapy(),
-                referenceMonth);
+        validateReferenceMonth(reimbursement.getTherapy(), referenceMonth);
 
         ensureMonthAvailable(
                 reimbursement.getTherapy().getId(),
                 referenceMonth,
-                reimbursement.getId());
+                reimbursement.getId()
+        );
 
         mapper.updateEntity(request, reimbursement);
-
         reimbursement.setReferenceMonth(referenceMonth);
 
         return mapper.toResponse(reimbursement);
@@ -166,48 +142,52 @@ public class ReimbursementService {
 
     @Transactional
     public void delete(UUID id) {
-        currentUserService.requireAdmin();
+        currentUserService.requireWritePermission();
 
-        Reimbursement reimbursement =
-                findScopedReimbursement(id);
+        Reimbursement reimbursement = findAccessibleReimbursement(id);
 
         ensureReimbursementIsDraft(reimbursement);
 
-        Solicitation.delete(
-                "reimbursement.id = ?1",
-                reimbursement.getId()
-        );
-
+        Solicitation.delete("reimbursement.id = ?1", reimbursement.getId());
         reimbursement.delete();
     }
 
-    private Reimbursement findScopedReimbursement(
-            UUID id
-    ) {
-        UUID familyId =
-                familyAccessService.getCurrentFamilyId();
+    private Reimbursement findAccessibleReimbursement(UUID id) {
+        Reimbursement reimbursement;
 
-        Reimbursement reimbursement =
-                Reimbursement.find(
-                        "id = ?1 "
-                                + "and therapy.dependent."
-                                + "family.id = ?2",
-                        id,
-                        familyId
-                ).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            reimbursement = Reimbursement.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+
+            reimbursement = Reimbursement.find(
+                    "id = ?1 and therapy.dependent.family.id = ?2",
+                    id,
+                    familyId
+            ).firstResult();
+        }
 
         if (reimbursement == null) {
-            throw new WebApplicationException("Reembolso não encontrado.", Response.Status.NOT_FOUND
-            );
+            throw new WebApplicationException("Reembolso não encontrado.", Response.Status.NOT_FOUND);
         }
 
         return reimbursement;
     }
 
-    private Therapy findScopedTherapy(UUID id) {
-        UUID familyId = familyAccessService.getCurrentFamilyId();
+    private Therapy findAccessibleTherapy(UUID id) {
+        Therapy therapy;
 
-        Therapy therapy = Therapy.find("id = ?1 " + "and dependent.family.id = ?2", id, familyId).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            therapy = Therapy.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+
+            therapy = Therapy.find(
+                    "id = ?1 and dependent.family.id = ?2",
+                    id,
+                    familyId
+            ).firstResult();
+        }
 
         if (therapy == null) {
             throw new WebApplicationException("Terapia não encontrada.", Response.Status.NOT_FOUND);
@@ -216,10 +196,15 @@ public class ReimbursementService {
         return therapy;
     }
 
-    private Dependent findScopedDependent(UUID id) {
-        UUID familyId = familyAccessService.getCurrentFamilyId();
+    private Dependent findAccessibleDependent(UUID id) {
+        Dependent dependent;
 
-        Dependent dependent = Dependent.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        if (currentUserService.hasRole(UserRole.ADMIN)) {
+            dependent = Dependent.findById(id);
+        } else {
+            UUID familyId = familyAccessService.getCurrentFamilyId();
+            dependent = Dependent.find("id = ?1 and family.id = ?2", id, familyId).firstResult();
+        }
 
         if (dependent == null) {
             throw new WebApplicationException("Dependente não encontrado.", Response.Status.NOT_FOUND);
@@ -228,35 +213,39 @@ public class ReimbursementService {
         return dependent;
     }
 
-    private void ensureMonthAvailable(
-            UUID therapyId,
-            LocalDate referenceMonth,
-            UUID ignoredId
-    ) {
-        Reimbursement existing =
-                Reimbursement.find("therapy.id = ?1 and referenceMonth = ?2", therapyId, referenceMonth).firstResult();
+    private void ensureMonthAvailable(UUID therapyId, LocalDate referenceMonth, UUID ignoredId) {
+        Reimbursement existing = Reimbursement.find(
+                "therapy.id = ?1 and referenceMonth = ?2",
+                therapyId,
+                referenceMonth
+        ).firstResult();
 
         if (existing != null && !existing.getId().equals(ignoredId)) {
-            throw new WebApplicationException("Já existe um reembolso para esta terapia no mês informado.", Response.Status.CONFLICT);
+            throw new WebApplicationException(
+                    "Já existe um reembolso para esta terapia no mês informado.",
+                    Response.Status.CONFLICT
+            );
         }
     }
 
     private void ensureReimbursementIsDraft(Reimbursement reimbursement) {
         long submittedCount = Solicitation.count(
-                "reimbursement.id = ?1 and status <> ?2", reimbursement.getId(), SolicitationStatus.NOT_REQUESTED);
+                "reimbursement.id = ?1 and status <> ?2",
+                reimbursement.getId(),
+                SolicitationStatus.NOT_REQUESTED
+        );
 
         if (submittedCount > 0) {
-            throw new WebApplicationException("Este reembolso já possui histórico de solicitação e não pode ser alterado ou excluído.", Response.Status.CONFLICT);
+            throw new WebApplicationException(
+                    "Este reembolso já possui histórico de solicitação e não pode ser alterado ou excluído.",
+                    Response.Status.CONFLICT
+            );
         }
     }
 
-    private void validateReferenceMonth(Therapy therapy, LocalDate referenceMonth
-    ) {
-        YearMonth requested =
-                YearMonth.from(referenceMonth);
-
-        YearMonth therapyStart =
-                YearMonth.from(therapy.getStartDate());
+    private void validateReferenceMonth(Therapy therapy, LocalDate referenceMonth) {
+        YearMonth requested = YearMonth.from(referenceMonth);
+        YearMonth therapyStart = YearMonth.from(therapy.getStartDate());
 
         if (requested.isBefore(therapyStart)) {
             throw new WebApplicationException(
@@ -269,8 +258,7 @@ public class ReimbursementService {
             return;
         }
 
-        YearMonth therapyEnd =
-                YearMonth.from(therapy.getEndDate());
+        YearMonth therapyEnd = YearMonth.from(therapy.getEndDate());
 
         if (requested.isAfter(therapyEnd)) {
             throw new WebApplicationException(
@@ -280,9 +268,7 @@ public class ReimbursementService {
         }
     }
 
-    private LocalDate normalizeMonth(
-            LocalDate referenceMonth
-    ) {
+    private LocalDate normalizeMonth(LocalDate referenceMonth) {
         return referenceMonth.withDayOfMonth(1);
     }
 }

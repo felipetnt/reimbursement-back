@@ -142,5 +142,37 @@ CREATE TABLE solicitations (
            REFERENCES reimbursements (id)
 );
 
-CREATE INDEX idx_solicitations_status
-    ON solicitations (status);
+CREATE TABLE documents (
+   id BINARY(16) NOT NULL,
+   file_name VARCHAR(255) NOT NULL,
+   content_type VARCHAR(100) NOT NULL,
+   file_size BIGINT NOT NULL,
+   document_type VARCHAR(30) NOT NULL,
+   file_data LONGBLOB NOT NULL,
+
+   dependent_id BINARY(16),
+   reimbursement_id BINARY(16),
+
+   CONSTRAINT pk_documents PRIMARY KEY (id),
+
+   CONSTRAINT fk_document_dependent
+       FOREIGN KEY (dependent_id)
+           REFERENCES dependents (id),
+
+   CONSTRAINT fk_document_reimbursement
+       FOREIGN KEY (reimbursement_id)
+           REFERENCES reimbursements (id),
+
+   CONSTRAINT ck_document_single_owner
+       CHECK (
+           (dependent_id IS NOT NULL AND reimbursement_id IS NULL)
+               OR
+           (dependent_id IS NULL AND reimbursement_id IS NOT NULL)
+           )
+);
+
+CREATE INDEX idx_documents_dependent
+    ON documents (dependent_id);
+
+CREATE INDEX idx_documents_reimbursement
+    ON documents (reimbursement_id);

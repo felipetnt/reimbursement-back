@@ -1,4 +1,4 @@
-package com.acme.dto.request.update;
+package com.acme.dto.request.auth;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
