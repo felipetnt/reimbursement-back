@@ -47,7 +47,6 @@ public class FamilyAccessService {
     }
 
     public void ensureCanAccessFamily(UUID requestedFamilyId) {
-
         if (requestedFamilyId == null) {
             throw new WebApplicationException("O ID da família é obrigatório.", Response.Status.BAD_REQUEST);
         }
@@ -56,7 +55,9 @@ public class FamilyAccessService {
             return;
         }
 
-        if (requestedFamilyId.equals(getCurrentFamilyId())) {
+        UUID currentFamilyId = getCurrentFamilyId();
+
+        if (!currentFamilyId.equals(requestedFamilyId)) {
             throw new WebApplicationException("Você não possui permissão para acessar outra família.", Response.Status.FORBIDDEN);
         }
     }

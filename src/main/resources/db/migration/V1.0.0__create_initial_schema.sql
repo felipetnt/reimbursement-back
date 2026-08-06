@@ -176,3 +176,8 @@ CREATE INDEX idx_documents_dependent
 
 CREATE INDEX idx_documents_reimbursement
     ON documents (reimbursement_id);
+
+INSERT INTO users
+    (id, name, email, password_hash, role, family_id)
+VALUES
+    (UUID_TO_BIN(UUID()), 'Administrador', 'jeysel@gmail.com', '$2a$10$zJhUoX748Q9rFwigqT2eaOscjZt1G74iFm6CWxpILuV4VvMY3zD96', 'ADMIN', NULL);
