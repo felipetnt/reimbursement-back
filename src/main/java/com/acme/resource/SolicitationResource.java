@@ -64,19 +64,19 @@ public class SolicitationResource {
         return service.findById(id);
     }
 
-    @POST
-    @RolesAllowed({"ADMIN", "USER"})
-    @Operation(summary = "Cria uma nova tentativa após uma solicitação negada")
-    @APIResponse(responseCode = "201", description = "Nova tentativa criada com sucesso")
-    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
-    @APIResponse(responseCode = "409", description = "A última solicitação ainda não foi negada")
-    public Response create(@Valid CreateSolicitationRequest request) {
-        SolicitationResponse response = service.create(request);
-
-        return Response.status(Response.Status.CREATED)
-                .entity(response)
-                .build();
-    }
+//    @POST
+//    @RolesAllowed({"ADMIN", "USER"})
+//    @Operation(summary = "Cria uma nova tentativa após uma solicitação negada")
+//    @APIResponse(responseCode = "201", description = "Nova tentativa criada com sucesso")
+//    @APIResponse(responseCode = "404", description = "Reembolso não encontrado")
+//    @APIResponse(responseCode = "409", description = "A última solicitação ainda não foi negada")
+//    public Response create(@Valid CreateSolicitationRequest request) {
+//        SolicitationResponse response = service.create(request);
+//
+//        return Response.status(Response.Status.CREATED)
+//                .entity(response)
+//                .build();
+//    }
 
     @PUT
     @Path("/{id}")

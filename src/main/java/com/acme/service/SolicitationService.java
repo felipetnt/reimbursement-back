@@ -69,27 +69,27 @@ public class SolicitationService {
                 .toList();
     }
 
-    @Transactional
-    public SolicitationResponse create(CreateSolicitationRequest request) {
-        currentUserService.requireWritePermission();
-
-        Reimbursement reimbursement = findAccessibleReimbursement(request.reimbursementId());
-
-        ensureCanCreateNewAttempt(reimbursement);
-
-        Integer attemptNumber = getNextAttemptNumber(reimbursement.getId());
-
-        Solicitation solicitation = mapper.toEntity(
-                request,
-                reimbursement,
-                attemptNumber,
-                SolicitationStatus.NOT_REQUESTED
-        );
-
-        solicitation.persist();
-
-        return mapper.toResponse(solicitation);
-    }
+//    @Transactional
+//    public SolicitationResponse create(CreateSolicitationRequest request) {
+//        currentUserService.requireWritePermission();
+//
+//        Reimbursement reimbursement = findAccessibleReimbursement(request.reimbursementId());
+//
+//        ensureCanCreateNewAttempt(reimbursement);
+//
+//        Integer attemptNumber = getNextAttemptNumber(reimbursement.getId());
+//
+//        Solicitation solicitation = mapper.toEntity(
+//                request,
+//                reimbursement,
+//                attemptNumber,
+//                SolicitationStatus.NOT_REQUESTED
+//        );
+//
+//        solicitation.persist();
+//
+//        return mapper.toResponse(solicitation);
+//    }
 
     @Transactional
     public SolicitationResponse update(UUID id, UpdateSolicitationRequest request) {
@@ -114,6 +114,10 @@ public class SolicitationService {
         );
 
         mapper.updateEntity(request, solicitation);
+
+        if (request.status() == SolicitationStatus.DENIED) {
+            createNextAttempt(solicitation.getReimbursement());
+        }
 
         return mapper.toResponse(solicitation);
     }
@@ -191,6 +195,17 @@ public class SolicitationService {
         }
     }
 
+    private void createNextAttempt(Reimbursement reimbursement){
+        Integer attemptNumber = getNextAttemptNumber(reimbursement.getId());
+
+        Solicitation nextTry = new Solicitation();
+        nextTry.setReimbursement(reimbursement);
+        nextTry.setAttemptNumber(attemptNumber);
+        nextTry.setStatus(SolicitationStatus.NOT_REQUESTED);
+
+        nextTry.persist();
+    }
+
     private void validateStatusRules(
             SolicitationStatus status,
             String protocolNumber,
@@ -206,6 +221,10 @@ public class SolicitationService {
         }
 
         if (status == SolicitationStatus.NOT_REQUESTED) {
+            if (!isBlank(protocolNumber) || requestDate != null || reimbursementDate != null || amountReceived != null) {
+                throw new WebApplicationException("Uma solicitação não requisitada não pode possuir protocolo, data de solicitação, data de reembolso ou valor recebido.", Response.Status.BAD_REQUEST);
+            }
+
             return;
         }
 
@@ -231,19 +250,23 @@ public class SolicitationService {
                 );
             }
 
-            if (amountReceived == null || amountReceived.compareTo(BigDecimal.ZERO) <= 0) {
+            if (amountReceived == null
+                    || amountReceived.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new WebApplicationException(
                         "Valor recebido deve ser maior que zero para o status REIMBURSED.",
                         Response.Status.BAD_REQUEST
                 );
             }
+
+            return;
+        }
+
+        if (reimbursementDate != null || amountReceived != null) {
+            throw new WebApplicationException("Data de reembolso e valor recebido só podem ser informados quando o status for REIMBURSED.", Response.Status.BAD_REQUEST);
         }
     }
 
-    private void validateStatusTransition(
-            SolicitationStatus currentStatus,
-            SolicitationStatus newStatus
-    ) {
+    private void validateStatusTransition(SolicitationStatus currentStatus, SolicitationStatus newStatus) {
         if (newStatus == null) {
             throw new WebApplicationException(
                     "Novo status é obrigatório.",
@@ -258,13 +281,9 @@ public class SolicitationService {
         boolean valid =
                 currentStatus == SolicitationStatus.NOT_REQUESTED
                         && newStatus == SolicitationStatus.UNDER_REVIEW
-
                         || currentStatus == SolicitationStatus.UNDER_REVIEW
-                        && (
-                        newStatus == SolicitationStatus.AUTHORIZED
-                                || newStatus == SolicitationStatus.DENIED
-                )
-
+                        && (newStatus == SolicitationStatus.AUTHORIZED
+                        || newStatus == SolicitationStatus.DENIED)
                         || currentStatus == SolicitationStatus.AUTHORIZED
                         && newStatus == SolicitationStatus.REIMBURSED;
 
