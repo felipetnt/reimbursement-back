@@ -5,20 +5,27 @@ import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Professional;
 import com.acme.domain.model.Reimbursement;
 import com.acme.domain.model.Solicitation;
-import com.acme.domain.model.Therapy;
 import com.acme.dto.response.DashboardProfessionalResponse;
 import com.acme.dto.response.DashboardResponse;
 import com.acme.dto.response.DashboardStatusResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 
 import java.math.BigDecimal;
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @ApplicationScoped
@@ -30,18 +37,24 @@ public class DashboardService {
     @Inject
     FamilyAccessService familyAccessService;
 
-    public DashboardResponse getDashboard(UUID requestedFamilyId) {
+    public DashboardResponse getDashboard(UUID requestedFamilyId, Integer requestedYear, Integer requestedMonth) {
         UUID familyId = resolveFamilyId(requestedFamilyId);
 
-        List<Reimbursement> reimbursements = findReimbursements(familyId);
-        List<Solicitation> solicitations = findSolicitations(familyId);
-        List<Professional> professionals = findProfessionals(familyId);
+        YearMonth period = resolvePeriod(requestedYear, requestedMonth);
+
+        LocalDate referenceMonth = period.atDay(1);
+
+        List<Reimbursement> reimbursements = findReimbursements(familyId, referenceMonth);
+
+        List<Solicitation> solicitations = findSolicitations(familyId, referenceMonth);
 
         Map<UUID, Solicitation> latestSolicitations = getLatestSolicitations(solicitations);
 
         EnumMap<SolicitationStatus, StatusAccumulator> statusAccumulators = createStatusAccumulators();
 
-        Map<UUID, ProfessionalAccumulator> professionalAccumulators = createProfessionalAccumulators(professionals);
+        Map<UUID, ProfessionalAccumulator> professionalAccumulators = new LinkedHashMap<>();
+
+        Set<UUID> therapyIds = new HashSet<>();
 
         for (Reimbursement reimbursement : reimbursements) {
             Solicitation solicitation = latestSolicitations.get(reimbursement.getId());
@@ -50,31 +63,50 @@ public class DashboardService {
 
             statusAccumulators.get(status).add(reimbursement.getTotalAmount());
 
+            therapyIds.add(reimbursement.getTherapy().getId());
+
             Professional professional = reimbursement.getTherapy().getProfessional();
 
-            ProfessionalAccumulator professionalAccumulator =
-                    professionalAccumulators.computeIfAbsent(professional.getId(), id -> new ProfessionalAccumulator(professional));
+            ProfessionalAccumulator professionalAccumulator = professionalAccumulators.computeIfAbsent(professional.getId(), id -> new ProfessionalAccumulator(professional));
 
             professionalAccumulator.increment(status);
         }
 
         List<DashboardStatusResponse> statuses = buildStatusResponses(statusAccumulators);
 
-        List<DashboardProfessionalResponse> professionalsSummary = professionalAccumulators
+        List<DashboardProfessionalResponse> professionalsSummary =
+                professionalAccumulators
                         .values()
                         .stream()
                         .map(ProfessionalAccumulator::toResponse)
+                        .sorted(Comparator.comparing(DashboardProfessionalResponse::professionalName, String.CASE_INSENSITIVE_ORDER))
                         .toList();
 
-        long activeTherapies = countActiveTherapies(familyId);
-
         return new DashboardResponse(
+                period.getYear(),
+                period.getMonthValue(),
                 reimbursements.size(),
-                activeTherapies,
-                professionals.size(),
+                therapyIds.size(),
+                professionalAccumulators.size(),
                 statuses,
                 professionalsSummary
         );
+    }
+
+    private YearMonth resolvePeriod(Integer requestedYear, Integer requestedMonth) {
+        if (requestedYear == null && requestedMonth == null) {
+            return YearMonth.now();
+        }
+
+        if (requestedYear == null || requestedMonth == null) {
+            throw new WebApplicationException("Ano e mês devem ser informados juntos.", Response.Status.BAD_REQUEST);
+        }
+
+        try {
+            return YearMonth.of(requestedYear, requestedMonth);
+        } catch (DateTimeException exception) {
+            throw new WebApplicationException("Ano ou mês inválido.", Response.Status.BAD_REQUEST);
+        }
     }
 
     private UUID resolveFamilyId(UUID requestedFamilyId) {
@@ -83,13 +115,10 @@ public class DashboardService {
                 return null;
             }
 
-            return familyAccessService
-                    .getAccessibleFamily(requestedFamilyId)
-                    .getId();
+            return familyAccessService.getAccessibleFamily(requestedFamilyId).getId();
         }
 
-        UUID currentFamilyId =
-                familyAccessService.getCurrentFamilyId();
+        UUID currentFamilyId = familyAccessService.getCurrentFamilyId();
 
         if (requestedFamilyId != null) {
             familyAccessService.ensureCanAccessFamily(requestedFamilyId);
@@ -98,56 +127,20 @@ public class DashboardService {
         return currentFamilyId;
     }
 
-    private List<Reimbursement> findReimbursements(UUID familyId) {
+    private List<Reimbursement> findReimbursements(UUID familyId, LocalDate referenceMonth) {
         if (familyId == null) {
-            return Reimbursement.list(
-                    "order by referenceMonth desc"
-            );
+            return Reimbursement.list("referenceMonth = ?1 order by referenceMonth desc", referenceMonth);
         }
 
-        return Reimbursement.list(
-                "therapy.dependent.family.id = ?1 order by referenceMonth desc",
-                familyId
-        );
+        return Reimbursement.list("therapy.dependent.family.id = ?1 and referenceMonth = ?2 order by referenceMonth desc", familyId, referenceMonth);
     }
 
-    private List<Solicitation> findSolicitations(UUID familyId) {
+    private List<Solicitation> findSolicitations(UUID familyId, LocalDate referenceMonth) {
         if (familyId == null) {
-            return Solicitation.list(
-                    "order by attemptNumber desc"
-            );
+            return Solicitation.list("reimbursement.referenceMonth = ?1 order by attemptNumber desc", referenceMonth);
         }
 
-        return Solicitation.list(
-                "reimbursement.therapy.dependent.family.id = ?1 order by attemptNumber desc",
-                familyId
-        );
-    }
-
-    private List<Professional> findProfessionals(UUID familyId) {
-        if (familyId == null) {
-            return Professional.list(
-                    "order by name"
-            );
-        }
-
-        return Professional.list(
-                "family.id = ?1 order by name",
-                familyId
-        );
-    }
-
-    private long countActiveTherapies(UUID familyId) {
-        if (familyId == null) {
-            return Therapy.count(
-                    "active = true"
-            );
-        }
-
-        return Therapy.count(
-                "active = true and dependent.family.id = ?1",
-                familyId
-        );
+        return Solicitation.list("reimbursement.therapy.dependent.family.id = ?1 and reimbursement.referenceMonth = ?2 order by attemptNumber desc", familyId, referenceMonth);
     }
 
     private Map<UUID, Solicitation> getLatestSolicitations(List<Solicitation> solicitations) {
@@ -176,23 +169,15 @@ public class DashboardService {
         return accumulators;
     }
 
-    private Map<UUID, ProfessionalAccumulator> createProfessionalAccumulators(List<Professional> professionals) {
-        Map<UUID, ProfessionalAccumulator> accumulators = new LinkedHashMap<>();
-
-        for (Professional professional : professionals) {
-            accumulators.put(professional.getId(), new ProfessionalAccumulator(professional));
-        }
-
-        return accumulators;
-    }
-
     private List<DashboardStatusResponse> buildStatusResponses(EnumMap<SolicitationStatus, StatusAccumulator> accumulators) {
         List<DashboardStatusResponse> responses = new ArrayList<>();
 
         for (SolicitationStatus status : SolicitationStatus.values()) {
             StatusAccumulator accumulator = accumulators.get(status);
 
-            responses.add(new DashboardStatusResponse(status, accumulator.quantity, accumulator.totalAmount));
+            responses.add(
+                    new DashboardStatusResponse(status, accumulator.quantity, accumulator.totalAmount)
+            );
         }
 
         return responses;
@@ -202,15 +187,13 @@ public class DashboardService {
 
         private long quantity;
 
-        private BigDecimal totalAmount =
-                BigDecimal.ZERO;
+        private BigDecimal totalAmount = BigDecimal.ZERO;
 
         void add(BigDecimal amount) {
             quantity++;
 
             if (amount != null) {
-                totalAmount =
-                        totalAmount.add(amount);
+                totalAmount = totalAmount.add(amount);
             }
         }
     }
@@ -246,11 +229,7 @@ public class DashboardService {
         }
 
         long total() {
-            return notRequested
-                    + underReview
-                    + authorized
-                    + reimbursed
-                    + denied;
+            return notRequested + underReview + authorized + reimbursed + denied;
         }
 
         DashboardProfessionalResponse toResponse() {

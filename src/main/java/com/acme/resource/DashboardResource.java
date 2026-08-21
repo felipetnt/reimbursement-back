@@ -19,7 +19,10 @@ import java.util.UUID;
 @Path("/dashboard")
 @Authenticated
 @Produces(MediaType.APPLICATION_JSON)
-@Tag(name = "Dashboard", description = "Indicadores gerais de reembolsos")
+@Tag(
+        name = "Dashboard",
+        description = "Indicadores mensais de reembolsos"
+)
 public class DashboardResource {
 
     @Inject
@@ -28,11 +31,18 @@ public class DashboardResource {
     @GET
     @RolesAllowed({"ADMIN", "USER", "VIEWER"})
     @Operation(
-            summary = "Obtém os indicadores do dashboard",
-            description = "ADMIN pode visualizar todas as famílias ou filtrar por família. USER e VIEWER visualizam somente a própria família."
+            summary = "Obtém os indicadores mensais do dashboard",
+            description = "Por padrão utiliza o mês atual. ADMIN pode filtrar por família. USER e VIEWER visualizam somente a própria família."
     )
-    @APIResponse(responseCode = "200", description = "Indicadores encontrados")
-    public DashboardResponse getDashboard(@QueryParam("familyId") UUID familyId) {
-        return service.getDashboard(familyId);
+    @APIResponse(
+            responseCode = "200",
+            description = "Indicadores encontrados"
+    )
+    public DashboardResponse getDashboard(
+            @QueryParam("familyId") UUID familyId,
+            @QueryParam("year") Integer year,
+            @QueryParam("month") Integer month
+    ) {
+        return service.getDashboard(familyId, year, month);
     }
 }
