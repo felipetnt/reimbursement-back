@@ -5,6 +5,7 @@ import com.acme.domain.model.Family;
 import com.acme.domain.model.User;
 import com.acme.dto.request.auth.ChangePasswordRequest;
 import com.acme.dto.request.create.CreateUserRequest;
+import com.acme.dto.request.update.UpdateMyProfileRequest;
 import com.acme.dto.request.update.UpdateUserRequest;
 import com.acme.dto.response.UserResponse;
 import com.acme.mapper.UserMapper;
@@ -110,6 +111,25 @@ public class UserService {
     }
 
     @Transactional
+    public UserResponse updateMe(UpdateMyProfileRequest request) {
+        User user = User.findById(currentUserService.getUserId());
+
+        if (user == null) {
+            throw new WebApplicationException(
+                    "Usuário autenticado não encontrado.",
+                    Response.Status.UNAUTHORIZED
+            );
+        }
+
+        ensureEmailAvailableForUpdate(request.email(), user.getId());
+
+        user.setName(request.name().trim());
+        user.setEmail(normalizeEmail(request.email()));
+
+        return mapper.toResponse(user);
+    }
+
+    @Transactional
     public void changeMyPassword(ChangePasswordRequest request) {
         User user = User.findById(currentUserService.getUserId());
 
@@ -155,6 +175,10 @@ public class UserService {
             return null;
         }
 
+        if (!currentUserIsAdmin) {
+            return familyAccessService.getCurrentFamily();
+        }
+
         if (request.familyId() == null) {
             throw new WebApplicationException(
                     "A família é obrigatória para usuários e visualizadores.",
@@ -162,14 +186,7 @@ public class UserService {
             );
         }
 
-
-        if (currentUserIsAdmin) {
-            return familyAccessService.getAccessibleFamily(request.familyId());
-        }
-
-        familyAccessService.ensureCanAccessFamily(request.familyId());
-
-        return familyAccessService.getCurrentFamily();
+        return familyAccessService.getAccessibleFamily(request.familyId());
     }
 
     private User findAccessibleUser(UUID id) {

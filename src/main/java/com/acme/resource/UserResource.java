@@ -2,6 +2,7 @@ package com.acme.resource;
 
 import com.acme.dto.request.auth.ChangePasswordRequest;
 import com.acme.dto.request.create.CreateUserRequest;
+import com.acme.dto.request.update.UpdateMyProfileRequest;
 import com.acme.dto.request.update.UpdateUserRequest;
 import com.acme.dto.response.UserResponse;
 import com.acme.service.UserService;
@@ -63,6 +64,14 @@ public class UserResource {
     public Response changeMyPassword(@Valid ChangePasswordRequest request) {
         service.changeMyPassword(request);
         return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/me")
+    @RolesAllowed({"ADMIN", "USER", "VIEWER"})
+    @Operation(summary = "Atualiza os dados do usuário autenticado")
+    public UserResponse updateMe(@Valid UpdateMyProfileRequest request) {
+        return service.updateMe(request);
     }
 
     @GET
