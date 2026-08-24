@@ -2,6 +2,8 @@ package com.acme.service;
 
 import com.acme.domain.model.Dependent;
 import com.acme.domain.model.Family;
+import com.acme.domain.model.Professional;
+import com.acme.domain.model.Specialty;
 import com.acme.domain.model.User;
 import com.acme.dto.request.create.CreateFamilyRequest;
 import com.acme.dto.request.update.UpdateFamilyRequest;
@@ -45,33 +47,25 @@ public class FamilyService {
     public FamilyResponse findById(UUID id) {
         currentUserService.requireAdmin();
 
-        Family family =
-                familyAccessService.getAccessibleFamily(id);
+        Family family = familyAccessService.getAccessibleFamily(id);
 
         return familyMapper.toResponse(family);
     }
 
     public FamilyResponse getMyFamily() {
-        Family family =
-                familyAccessService.getCurrentFamily();
+        Family family = familyAccessService.getCurrentFamily();
 
         return familyMapper.toResponse(family);
     }
 
     public MyFamilyResponse getMyFamilyDetails() {
         Family family = familyAccessService.getCurrentFamily();
-
         UUID familyId = family.getId();
 
         List<User> users = User.list("family.id = ?1 order by name", familyId);
-
         List<Dependent> dependents = Dependent.list("family.id = ?1 order by name", familyId);
 
-        return myFamilyMapper.toResponse(
-                family,
-                users,
-                dependents
-        );
+        return myFamilyMapper.toResponse(family, users, dependents);
     }
 
     @Transactional
@@ -81,7 +75,6 @@ public class FamilyService {
         ensureNameAvailable(request.name(), null);
 
         Family family = familyMapper.toEntity(request);
-
         family.persist();
 
         return familyMapper.toResponse(family);
@@ -113,12 +106,39 @@ public class FamilyService {
         return familyMapper.toResponse(family);
     }
 
+    @Transactional
+    public void delete(UUID id) {
+        currentUserService.requireAdmin();
+
+        Family family = familyAccessService.getAccessibleFamily(id);
+
+        ensureFamilyCanBeDeleted(family.getId());
+
+        family.delete();
+    }
+
+    private void ensureFamilyCanBeDeleted(UUID familyId) {
+        long userCount = User.count("family.id = ?1", familyId);
+        long dependentCount = Dependent.count("family.id = ?1", familyId);
+        long specialtyCount = Specialty.count("family.id = ?1", familyId);
+        long professionalCount = Professional.count("family.id = ?1", familyId);
+
+        if (userCount > 0 || dependentCount > 0 || specialtyCount > 0 || professionalCount > 0) {
+            throw new WebApplicationException(
+                    "Não é possível excluir uma família que possui dados vinculados.",
+                    Response.Status.CONFLICT
+            );
+        }
+    }
+
     private void ensureNameAvailable(String name, UUID ignoredFamilyId) {
         Family existing = Family.find("lower(name) = lower(?1)", name.trim()).firstResult();
 
         if (existing != null && !existing.getId().equals(ignoredFamilyId)) {
-
-            throw new WebApplicationException("Já existe uma família com este nome.", Response.Status.CONFLICT);
+            throw new WebApplicationException(
+                    "Já existe uma família com este nome.",
+                    Response.Status.CONFLICT
+            );
         }
     }
 }

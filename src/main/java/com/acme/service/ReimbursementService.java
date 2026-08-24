@@ -3,6 +3,7 @@ package com.acme.service;
 import com.acme.domain.enums.SolicitationStatus;
 import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Dependent;
+import com.acme.domain.model.Document;
 import com.acme.domain.model.Reimbursement;
 import com.acme.domain.model.Solicitation;
 import com.acme.domain.model.Therapy;
@@ -69,10 +70,7 @@ public class ReimbursementService {
                 reimbursement.getId()
         );
 
-        return detailsMapper.toResponse(
-                reimbursement,
-                solicitations
-        );
+        return detailsMapper.toResponse(reimbursement, solicitations);
     }
 
     public List<ReimbursementResponse> listByDependent(UUID dependentId) {
@@ -96,12 +94,7 @@ public class ReimbursementService {
         LocalDate referenceMonth = normalizeMonth(request.referenceMonth());
 
         validateReferenceMonth(therapy, referenceMonth);
-
-        ensureMonthAvailable(
-                therapy.getId(),
-                referenceMonth,
-                null
-        );
+        ensureMonthAvailable(therapy.getId(), referenceMonth, null);
 
         Reimbursement reimbursement = mapper.toEntity(request, therapy);
         reimbursement.setReferenceMonth(referenceMonth);
@@ -127,12 +120,7 @@ public class ReimbursementService {
         LocalDate referenceMonth = normalizeMonth(request.referenceMonth());
 
         validateReferenceMonth(reimbursement.getTherapy(), referenceMonth);
-
-        ensureMonthAvailable(
-                reimbursement.getTherapy().getId(),
-                referenceMonth,
-                reimbursement.getId()
-        );
+        ensureMonthAvailable(reimbursement.getTherapy().getId(), referenceMonth, reimbursement.getId());
 
         mapper.updateEntity(request, reimbursement);
         reimbursement.setReferenceMonth(referenceMonth);
@@ -147,6 +135,7 @@ public class ReimbursementService {
         Reimbursement reimbursement = findAccessibleReimbursement(id);
 
         ensureReimbursementIsDraft(reimbursement);
+        ensureReimbursementHasNoDocuments(reimbursement.getId());
 
         Solicitation.delete("reimbursement.id = ?1", reimbursement.getId());
         reimbursement.delete();
@@ -238,6 +227,17 @@ public class ReimbursementService {
         if (submittedCount > 0) {
             throw new WebApplicationException(
                     "Este reembolso já possui histórico de solicitação e não pode ser alterado ou excluído.",
+                    Response.Status.CONFLICT
+            );
+        }
+    }
+
+    private void ensureReimbursementHasNoDocuments(UUID reimbursementId) {
+        long documentCount = Document.count("reimbursement.id = ?1", reimbursementId);
+
+        if (documentCount > 0) {
+            throw new WebApplicationException(
+                    "Não é possível excluir um reembolso que possui documentos vinculados.",
                     Response.Status.CONFLICT
             );
         }

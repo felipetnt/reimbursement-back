@@ -2,13 +2,14 @@ package com.acme.service;
 
 import com.acme.domain.enums.UserRole;
 import com.acme.domain.model.Dependent;
+import com.acme.domain.model.Document;
 import com.acme.domain.model.Family;
-import com.acme.domain.model.Reimbursement;
 import com.acme.domain.model.Therapy;
 import com.acme.dto.request.create.CreateDependentRequest;
 import com.acme.dto.request.update.UpdateDependentRequest;
 import com.acme.dto.response.DependentDetailsResponse;
 import com.acme.dto.response.DependentResponse;
+import com.acme.domain.model.Reimbursement;
 import com.acme.mapper.DependentDetailsMapper;
 import com.acme.mapper.DependentMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -71,11 +72,7 @@ public class DependentService {
                 familyId
         );
 
-        return detailsMapper.toResponse(
-                dependent,
-                therapies,
-                reimbursements
-        );
+        return detailsMapper.toResponse(dependent, therapies, reimbursements);
     }
 
     @Transactional
@@ -107,16 +104,21 @@ public class DependentService {
 
         Dependent dependent = findAccessibleDependent(id);
 
-        long therapyCount = Therapy.count("dependent.id = ?1", dependent.getId());
+        ensureDependentCanBeDeleted(dependent.getId());
 
-        if (therapyCount > 0) {
+        dependent.delete();
+    }
+
+    private void ensureDependentCanBeDeleted(UUID dependentId) {
+        long therapyCount = Therapy.count("dependent.id = ?1", dependentId);
+        long documentCount = Document.count("dependent.id = ?1", dependentId);
+
+        if (therapyCount > 0 || documentCount > 0) {
             throw new WebApplicationException(
-                    "Não é possível excluir um dependente que possui terapias ou histórico financeiro.",
+                    "Não é possível excluir um dependente que possui terapias, documentos ou histórico financeiro.",
                     Response.Status.CONFLICT
             );
         }
-
-        dependent.delete();
     }
 
     private Dependent findAccessibleDependent(UUID id) {

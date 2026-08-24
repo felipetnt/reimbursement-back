@@ -86,7 +86,7 @@ public class ReimbursementResource {
     @APIResponse(responseCode = "201", description = "Reembolso criado com sucesso")
     @APIResponse(responseCode = "400", description = "Mês de referência inválido")
     @APIResponse(responseCode = "404", description = "Terapia não encontrada")
-    @APIResponse(responseCode = "409", description = "Já existe reembolso no mês informado")
+    @APIResponse(responseCode = "409", description = "Reembolso possui histórico de solicitação ou documentos vinculados")
     public Response create(@Valid CreateReimbursementRequest request) {
         ReimbursementResponse response = service.create(request);
 
